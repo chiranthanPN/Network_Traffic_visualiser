@@ -1,0 +1,13 @@
+{
+    "threshold": 0.8,
+    "validation_precision": 0.2541966426858513,
+    "validation_recall": 0.6198830409356725,
+    "validation_f1": 0.36054421768707484,
+    "test_precision": 0.2222222222222222,
+    "test_recall": 0.5433526011560693,
+    "test_f1": 0.31543624161073824,
+    "model": "trained_models\\gat\\gat_model_leakage_safe.pt",
+    "graph": "data\\gat\\gat_graph_leakage_safe.pt",
+    "evaluation_type": "leakage_safe",
+    "message_passing": "training_edges_only"
+}
