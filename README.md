@@ -157,7 +157,7 @@ Open http://localhost:5173 in your browser.
 ## Project Structure
 
 ```
-Network_Traffic_visualiser/
+Network_Traffic_visualiser_Minor_project/
 ├── backend/
 │   ├── app/
 │   │   ├── api/routes.py          ← FastAPI endpoints + WebSocket
