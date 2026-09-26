@@ -57,11 +57,14 @@ class DetectionEngine:
 
         print("\nLoading Isolation Forest...")
 
-        self.isolation_forest = joblib.load(
-            self.isolation_forest_path
-        )
-
-        print("Isolation Forest loaded.")
+        try:
+            self.isolation_forest = joblib.load(
+                self.isolation_forest_path
+            )
+            print("Isolation Forest loaded.")
+        except Exception as e:
+            print(f"Warning: Isolation Forest model unavailable ({e}).")
+            self.isolation_forest = None
 
         # =========================================================
         # LOAD GAT
@@ -69,9 +72,12 @@ class DetectionEngine:
 
         print("\nLoading GAT...")
 
-        self.gat = GATInference()
-
-        print("GAT loaded.")
+        try:
+            self.gat = GATInference()
+            print("GAT loaded.")
+        except Exception as e:
+            print(f"Warning: GAT model unavailable ({e}).")
+            self.gat = None
 
         # =========================================================
         # LIVE GRAPH BUILDER
@@ -84,6 +90,7 @@ class DetectionEngine:
         print("\n" + "=" * 70)
         print("DETECTION ENGINE READY")
         print("=" * 70)
+
 
     # =============================================================
     # EXTRACT ISOLATION FOREST FEATURES
@@ -118,6 +125,12 @@ class DetectionEngine:
 
         if not flows:
             return []
+
+        if self.isolation_forest is None:
+            return [
+                {"is_anomaly": False, "decision_score": 0.0}
+                for _ in flows
+            ]
 
         feature_matrix = [
             self._extract_isolation_features(flow)
@@ -173,6 +186,7 @@ class DetectionEngine:
 
         return results
 
+
     # =============================================================
     # GAT INFERENCE
     # =============================================================
@@ -180,6 +194,9 @@ class DetectionEngine:
     def _run_gat(self, flows):
 
         if not flows:
+            return {}
+
+        if self.gat is None:
             return {}
 
         # ---------------------------------------------------------

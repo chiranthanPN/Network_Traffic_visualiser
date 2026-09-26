@@ -1,24 +1,16 @@
-# Python virtual environment
-venv/
-.venv/
-
-# Python cache
+# Python
 __pycache__/
-*.pyc
-
-# Environment variables
+*.py[cod]
+*.pyo
 .env
-
-# VS Code
-.vscode/
-
-# Trained ML models
+venv/
 *.pkl
 
-# Large datasets
-*.csv
-*.zip
+# Node / frontend
+node_modules/
+dist/
+.vite/
 
-# OS files
+# OS
 .DS_Store
 Thumbs.db
