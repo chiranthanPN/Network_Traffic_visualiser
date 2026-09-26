@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from isolation_forest import train_model
+from .isolation_forest import train_model
 
 
 # Dataset location
