@@ -12,6 +12,11 @@ export async function startMonitor(): Promise<{status: string}> {
   return res.json();
 }
 
+export async function startDemo(): Promise<{status: string}> {
+  const res = await fetch(`${API_BASE}/monitor/demo`, { method: 'POST' });
+  return res.json();
+}
+
 export async function stopMonitor(): Promise<{status: string}> {
   const res = await fetch(`${API_BASE}/monitor/stop`, { method: 'POST' });
   return res.json();
