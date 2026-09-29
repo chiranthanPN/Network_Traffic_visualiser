@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import ForceGraph2D from 'react-force-graph-2d';
 import { Shield, Play, Square, AlertTriangle, ShieldCheck, Wifi, WifiOff } from 'lucide-react';
 import { useNetworkWebSocket } from './hooks/useNetworkWebSocket';
-import { getHealth, startMonitor, stopMonitor } from './services/api';
+import { getHealth, startDemo, startMonitor, stopMonitor } from './services/api';
 import { HealthStatus, FlowResult } from './types/network';
 import { TrafficChart } from './components/TrafficChart';
 
@@ -106,6 +106,16 @@ export default function App() {
     setIsMonitoring(false);
   };
 
+  const handleDemo = async () => {
+    setIsStarting(true);
+    try {
+      await startDemo();
+      setIsMonitoring(true);
+    } finally {
+      setIsStarting(false);
+    }
+  };
+
   const handleReset = () => {
     clearHistory();
     setSelectedNode(null);
@@ -116,7 +126,10 @@ export default function App() {
   const liveStatus = (() => {
     if (backendUp === false) return { label: 'BACKEND DOWN', cls: 'bg-high/20 text-high border-high/40' };
     if (!isConnected && backendUp) return { label: 'CONNECTING…', cls: 'bg-medium/20 text-medium border-medium/40' };
-    if (isMonitoring && isConnected) return { label: '● LIVE', cls: 'bg-low/20 text-low border-low/40' };
+    if (isMonitoring && isConnected) return {
+      label: lastUpdate?.mode === 'demo' ? '● DEMO' : '● LIVE',
+      cls: 'bg-low/20 text-low border-low/40'
+    };
     if (isConnected && !isMonitoring) return { label: '○ STOPPED', cls: 'bg-gray-700/40 text-gray-300 border-border' };
     return { label: '● DISCONNECTED', cls: 'bg-high/20 text-high border-high/40' };
   })();
@@ -200,9 +213,9 @@ export default function App() {
             {liveStatus.label}
           </div>
           {isConnected ? (
-            <Wifi className="w-4 h-4 text-low" title="WebSocket connected" />
+            <span title="WebSocket connected"><Wifi className="w-4 h-4 text-low" /></span>
           ) : (
-            <WifiOff className="w-4 h-4 text-high" title="WebSocket disconnected" />
+            <span title="WebSocket disconnected"><WifiOff className="w-4 h-4 text-high" /></span>
           )}
         </div>
 
@@ -217,14 +230,23 @@ export default function App() {
         {/* Right: controls */}
         <div className="flex items-center gap-2">
           {!isMonitoring ? (
-            <button
-              onClick={handleStart}
-              disabled={isStarting || backendUp === false}
-              className="flex items-center gap-2 bg-primary hover:bg-primary/80 disabled:opacity-40 px-4 py-1.5 rounded text-white text-sm font-medium transition-colors"
-            >
-              <Play className="w-3.5 h-3.5" />
-              {isStarting ? 'Starting…' : 'Start Monitoring'}
-            </button>
+            <>
+              <button
+                onClick={handleDemo}
+                disabled={isStarting || backendUp === false}
+                className="flex items-center gap-2 border border-border hover:border-primary disabled:opacity-40 px-3 py-1.5 rounded text-gray-200 text-sm font-medium transition-colors"
+              >
+                <Play className="w-3.5 h-3.5" /> Replay Sample
+              </button>
+              <button
+                onClick={handleStart}
+                disabled={isStarting || backendUp === false}
+                className="flex items-center gap-2 bg-primary hover:bg-primary/80 disabled:opacity-40 px-4 py-1.5 rounded text-white text-sm font-medium transition-colors"
+              >
+                <Play className="w-3.5 h-3.5" />
+                {isStarting ? 'Starting…' : 'Start Monitoring'}
+              </button>
+            </>
           ) : (
             <button
               onClick={handleStop}
@@ -275,7 +297,9 @@ export default function App() {
                 ? 'bg-background/80 text-low border-low/30'
                 : 'bg-background/80 text-gray-500 border-border'
             }`}>
-              {isMonitoring ? '● LIVE MONITORING' : '○ STOPPED'}
+              {isMonitoring
+                ? lastUpdate?.mode === 'demo' ? '● DEMO REPLAY' : '● LIVE MONITORING'
+                : '○ STOPPED'}
             </div>
           </div>
 
@@ -461,6 +485,8 @@ export default function App() {
                 {[
                   ['Packets', selectedEdge.packet_count.toLocaleString()],
                   ['Bytes', selectedEdge.byte_count.toLocaleString()],
+                  ...(selectedEdge.demo_scenario ? [['Scenario', selectedEdge.demo_scenario]] : []),
+                  ...(selectedEdge.expected_label ? [['Dataset label', selectedEdge.expected_label]] : []),
                 ].map(([k, v]) => (
                   <div key={String(k)} className="bg-background p-2 rounded">
                     <div className="text-gray-500">{k}</div>
@@ -564,6 +590,11 @@ export default function App() {
                   <div className="font-mono text-xs text-gray-200 truncate">
                     {f.source_ip} → {f.destination_ip}
                   </div>
+                  {f.demo_scenario && (
+                    <div className="text-[10px] text-yellow-300 mt-1 font-semibold uppercase tracking-wide">
+                      Type: {f.demo_scenario.replace(/_/g, ' ')}
+                    </div>
+                  )}
                   <div className="text-[10px] text-gray-500 mt-1">
                     {f.isolation_forest.is_anomaly && 'IF:anomaly '}
                     {f.gat.is_anomaly && `GAT:${f.gat.attack_score.toFixed(3)}`}

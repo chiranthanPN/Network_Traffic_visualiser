@@ -30,6 +30,8 @@ export interface FlowResult {
   isolation_forest: IsolationForestResult;
   gat: GATResult;
   fusion: FusionResult;
+  demo_scenario?: string;
+  expected_label?: 'NORMAL' | 'SYNTHETIC_ANOMALY';
 }
 
 // ─── Window-level snapshot (one WebSocket message) ───────────────────────────
@@ -42,6 +44,7 @@ export interface RiskCounts {
 
 export interface NetworkUpdate {
   type: 'network_update';
+  mode?: 'live' | 'demo';
   /** Unix timestamp (seconds) */
   timestamp: number;
   /** Seconds for this analysis window */

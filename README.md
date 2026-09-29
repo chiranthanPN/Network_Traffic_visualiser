@@ -100,6 +100,10 @@ Open http://localhost:5173 in your browser.
 8. **Flow table** at the bottom: search by IP or protocol, filter by risk level
 9. Click **Stop Monitoring** to halt capture cleanly
 
+### Replay synthetic sample traffic
+
+Click **Replay Sample** to stream the labeled synthetic flows in `backend/data/demo_anomaly_flows.csv` through the same detection models and dashboard. The file includes ordinary examples and simulated port scans, login bursts, traffic floods, large transfers, and DNS bursts. This is flow-level demo data, not captured packets or model-training data; model results can include false positives and may vary with the installed models.
+
 ---
 
 ## API Endpoints

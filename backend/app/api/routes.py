@@ -1,6 +1,8 @@
 import asyncio
+import csv
 import time
 import math
+from pathlib import Path
 from typing import List, Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, BackgroundTasks
 
@@ -10,6 +12,7 @@ from app.detection.detection_engine import DetectionEngine
 from scapy.all import sniff
 
 router = APIRouter(prefix="/api")
+DEMO_DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "demo_anomaly_flows.csv"
 
 class MonitorState:
     def __init__(self):
@@ -18,6 +21,7 @@ class MonitorState:
         self.engine = None
         self.active_connections: List[WebSocket] = []
         self.window_size = 5
+        self.mode = None
 
 state = MonitorState()
 try:
@@ -45,6 +49,18 @@ def sniff_window(timeout):
     sniff(prn=process_packet, store=False, timeout=timeout)
     return pc.packet_counter
 
+async def broadcast(payload):
+    payload = make_json_safe(payload)
+    disconnected = []
+    for ws in state.active_connections:
+        try:
+            await ws.send_json(payload)
+        except Exception:
+            disconnected.append(ws)
+    for ws in disconnected:
+        if ws in state.active_connections:
+            state.active_connections.remove(ws)
+
 async def capture_loop():
     if state.engine is None:
         try:
@@ -62,11 +78,7 @@ async def capture_loop():
                 error_msg = "Packet capture requires administrator/root privileges."
             
             error_payload = {"type": "error", "message": error_msg}
-            for ws in state.active_connections:
-                try:
-                    await ws.send_json(error_payload)
-                except:
-                    pass
+            await broadcast(error_payload)
             break
         
         if not state.is_running:
@@ -97,18 +109,74 @@ async def capture_loop():
             "flows": results["results"]
         }
         
-        payload = make_json_safe(payload)
-        
-        disconnected = []
-        for ws in state.active_connections:
-            try:
-                await ws.send_json(payload)
-            except Exception:
-                disconnected.append(ws)
-                
-        for ws in disconnected:
-            if ws in state.active_connections:
-                state.active_connections.remove(ws)
+        payload["mode"] = "live"
+        await broadcast(payload)
+
+    state.mode = None
+
+async def demo_loop():
+    try:
+        with DEMO_DATA_PATH.open(newline="", encoding="utf-8") as data_file:
+            rows = list(csv.DictReader(data_file))
+
+        if not rows:
+            raise ValueError("The synthetic demo dataset is empty.")
+
+        for offset in range(0, len(rows), 8):
+            if not state.is_running or state.mode != "demo":
+                break
+
+            batch = rows[offset:offset + 8]
+            flows = []
+            for row in batch:
+                flow = {
+                    key: row[key]
+                    for key in (
+                        "source_ip", "destination_ip", "protocol", "scenario", "expected_label"
+                    )
+                }
+                flow["source_port"] = int(row["source_port"])
+                flow["destination_port"] = int(row["destination_port"])
+                for key in (
+                    "packet_count", "byte_count", "duration", "packets_per_second",
+                    "bytes_per_second", "average_packet_size", "unique_destination_ips",
+                    "unique_destination_ports", "tcp_syn_count", "tcp_rst_count"
+                ):
+                    flow[key] = float(row[key])
+                    if key in {
+                        "packet_count", "byte_count", "unique_destination_ips",
+                        "unique_destination_ports", "tcp_syn_count", "tcp_rst_count"
+                    }:
+                        flow[key] = int(flow[key])
+                flows.append(flow)
+
+            results = state.engine.analyze(flows)
+            for result, flow in zip(results["results"], flows):
+                result["demo_scenario"] = flow["scenario"]
+                result["expected_label"] = flow["expected_label"]
+
+            risk_counts = {"LOW": 0, "MEDIUM": 0, "HIGH": 0}
+            for result in results["results"]:
+                risk_counts[result["fusion"]["risk_level"]] += 1
+
+            await broadcast({
+                "type": "network_update",
+                "mode": "demo",
+                "timestamp": time.time(),
+                "window_duration": 2,
+                "packets_captured": sum(flow["packet_count"] for flow in flows),
+                "total_flows": len(results["results"]),
+                "anomalies": risk_counts["MEDIUM"] + risk_counts["HIGH"],
+                "risk_counts": risk_counts,
+                "flows": results["results"]
+            })
+            await asyncio.sleep(2)
+    except Exception as error:
+        await broadcast({"type": "error", "message": f"Demo replay failed: {error}"})
+    finally:
+        if state.mode == "demo":
+            state.is_running = False
+            state.mode = None
 
 @router.get("/health")
 def health_check():
@@ -128,12 +196,25 @@ async def start_monitor():
     if state.is_running:
         return {"status": "already_running"}
     state.is_running = True
+    state.mode = "live"
     state.task = asyncio.create_task(capture_loop())
+    return {"status": "started"}
+
+@router.post("/monitor/demo")
+async def start_demo():
+    if state.is_running:
+        return {"status": "already_running"}
+    if state.engine is None:
+        return {"status": "engine_unavailable"}
+    state.is_running = True
+    state.mode = "demo"
+    state.task = asyncio.create_task(demo_loop())
     return {"status": "started"}
 
 @router.post("/monitor/stop")
 async def stop_monitor():
     state.is_running = False
+    state.mode = None
     return {"status": "stopped"}
 
 @router.get("/monitor/status")
