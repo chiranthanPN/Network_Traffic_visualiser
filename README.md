@@ -1,49 +1,100 @@
 # Network Traffic Analyser
 
-A real-time network security visualization dashboard powered by a **Graph Attention Network (GAT)** and **Isolation Forest**, with a live interactive React frontend.
+A real-time network security visualization dashboard that captures live network packets, groups them into flows, and classifies each flow using two complementary AI models — a **Graph Attention Network (GAT)** for graph-level anomaly detection and an **Isolation Forest** for flow-level outlier detection. Results are fused into a single risk level (**LOW**, **MEDIUM**, or **HIGH**) and streamed over WebSocket to an interactive React dashboard.
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────┐        WebSocket        ┌─────────────────────────┐
-│   React Frontend    │ ←───────────────────── │   FastAPI Backend        │
-│   (Vite + TS +      │   /api/ws               │                         │
-│    TailwindCSS)     │                         │  ┌─────────────────┐   │
-│                     │   REST                  │  │  Scapy Sniffer  │   │
-│  Live Network Graph │ ←── /api/health         │  │  5-sec windows  │   │
-│  Alerts Feed        │ ←── /api/monitor/start  │  └────────┬────────┘   │
-│  Flow Table         │ ←── /api/monitor/stop   │           │            │
-│  Traffic Chart      │                         │  ┌────────▼────────┐   │
-│  Node/Edge Details  │                         │  │  FlowProcessor  │   │
-└─────────────────────┘                         │  └────────┬────────┘   │
-                                                │           │            │
-                                                │  ┌────────▼────────┐   │
-                                                │  │ DetectionEngine │   │
-                                                │  │ ├ Isolation     │   │
-                                                │  │ │   Forest      │   │
-                                                │  │ └ GAT Model     │   │
-                                                │  └────────┬────────┘   │
-                                                │           │            │
-                                                │  ┌────────▼────────┐   │
-                                                │  │  WS Broadcast   │   │
-                                                │  └─────────────────┘   │
-                                                └─────────────────────────┘
+┌─────────────────────────┐       WebSocket        ┌──────────────────────────┐
+│    React Frontend       │ ◄──────────────────── │    FastAPI Backend        │
+│    (Vite + TypeScript   │    /api/ws              │                          │
+│     + Tailwind CSS)     │                         │   ┌──────────────────┐   │
+│                         │    REST                 │   │   Scapy Sniffer  │   │
+│  ┌─ Live Network Graph  │ ◄── /api/health         │   │   5-sec windows  │   │
+│  ├─ Alerts Feed         │ ◄── /api/monitor/start  │   └────────┬─────────┘   │
+│  ├─ Flow Table          │ ◄── /api/monitor/stop   │            │             │
+│  ├─ Traffic Chart       │ ◄── /api/monitor/demo   │   ┌────────▼─────────┐   │
+│  └─ Node / Edge Detail  │                         │   │  FlowProcessor   │   │
+└─────────────────────────┘                         │   └────────┬─────────┘   │
+                                                    │            │             │
+                                                    │   ┌────────▼─────────┐   │
+                                                    │   │ DetectionEngine  │   │
+                                                    │   │  ├ Isolation     │   │
+                                                    │   │  │   Forest      │   │
+                                                    │   │  └ GAT Model     │   │
+                                                    │   └────────┬─────────┘   │
+                                                    │            │             │
+                                                    │   ┌────────▼─────────┐   │
+                                                    │   │  WS Broadcast    │   │
+                                                    │   └──────────────────┘   │
+                                                    └──────────────────────────┘
 ```
+
+---
+
+## ML Pipeline
+
+The detection pipeline runs entirely on the backend and is **not** modified by the frontend.
+
+### 1 — Packet Capture
+
+Scapy captures IP packets on all interfaces and groups them into bidirectional flows keyed by `(src_ip, dst_ip, src_port, dst_port, protocol)`.
+
+### 2 — Feature Extraction
+
+Each 5-second analysis window produces per-flow features:
+
+| Feature | Description |
+|---------|-------------|
+| `packet_count` | Total packets in the flow |
+| `byte_count` | Total bytes |
+| `duration` | Flow lifetime (seconds) |
+| `packets_per_second` | Packet rate |
+| `bytes_per_second` | Byte rate |
+| `average_packet_size` | Mean packet length |
+| `unique_destination_ips` | Distinct destination IPs |
+| `unique_destination_ports` | Distinct destination ports |
+| `tcp_syn_count` | TCP SYN flags observed |
+| `tcp_rst_count` | TCP RST flags observed |
+
+### 3 — Isolation Forest (flow-level)
+
+A scikit-learn `IsolationForest` (200 estimators, `contamination="auto"`) trained on normal traffic (`data/normal_traffic.csv`). Returns a binary `is_anomaly` flag and a `decision_score` (higher = more normal; **not** a probability).
+
+### 4 — GAT (graph-level)
+
+A Graph Attention Network built with PyTorch Geometric. A live graph is constructed where:
+
+- **Nodes** = unique IP addresses (14 features: flow_count, outbound/inbound flows, outbound/inbound packets, outbound/inbound bytes, average_duration, average_bytes_per_second, average_packets_per_second, average_packet_size, tcp_flows, udp_flows, unique_peers)
+- **Directed edges** = source IP → destination IP
+
+The model outputs an `attack_score` compared against a learned `threshold` (from `gat_threshold.json`). The score is **not** a calibrated probability.
+
+### 5 — Fusion
+
+The `DetectionEngine` fuses both model decisions per flow:
+
+| Isolation Forest | GAT | → Risk Level |
+|:---:|:---:|:---:|
+| Normal | Normal | **LOW** |
+| Anomaly | Normal | **MEDIUM** |
+| Normal | Anomaly | **MEDIUM** |
+| Anomaly | Anomaly | **HIGH** |
 
 ---
 
 ## Prerequisites
 
-| Tool | Version |
-|------|---------|
-| Python | 3.9+ |
-| Node.js | 18+ |
-| npm | 9+ |
+| Tool | Version | Notes |
+|------|---------|-------|
+| Python | 3.9+ | `py` or `python` |
+| Node.js | 18+ | For the frontend |
+| npm | 9+ | |
+| Npcap | 1.89+ | Required on Windows for raw packet capture (installer bundled as `npcap-1.89.exe`) |
 
-> **Windows users:** Packet capture with Scapy requires **Npcap** (free). Download from https://npcap.com/.  
-> **Start backend as Administrator** to allow raw packet capture.
+> **Windows:** Run the backend terminal **as Administrator** for Scapy to capture packets.
 
 ---
 
@@ -54,55 +105,70 @@ A real-time network security visualization dashboard powered by a **Graph Attent
 ```powershell
 cd backend
 
-# Install dependencies (first time only)
-python -m pip install -r requirements.txt fastapi uvicorn
+# Install Python dependencies (first time)
+pip install -r requirements.txt
 
-# Start the API server (run as Administrator for live capture)
+# Start the API server (as Administrator for live capture)
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-Verify the backend is up:
+Verify:
+
 ```
-http://localhost:8000/api/health
-→ {"api":true,"capture":false,"isolation_forest":false,"gat":true}
+GET http://localhost:8000/api/health
+→ {"api": true, "capture": false, "isolation_forest": true, "gat": true}
 ```
 
-> **Note:** `isolation_forest: false` means `trained_models/isolation_forest.pkl` is missing.  
-> The system still works — GAT handles detection. Train Isolation Forest separately with `python -m app.models.train_isolation_forest`.
+Both models should report `true`. If Isolation Forest reports `false`, retrain it:
 
----
+```powershell
+cd backend
+python -m app.models.train_isolation_forest
+```
 
 ### 2 — Frontend
 
 ```powershell
 cd frontend
 
-# Install Node packages (first time only)
+# Install Node packages (first time)
 npm install
 
-# Start the development server
+# Start the dev server
 npm run dev
 ```
 
-Open http://localhost:5173 in your browser.
+Open **http://localhost:5173** in your browser.
 
 ---
 
 ## Using the Dashboard
 
-1. Open the frontend at `http://localhost:5173`
-2. The **header** shows model/capture status (API · Isolation Forest · GAT · Capture)
-3. Click **Start Monitoring** — the backend starts a Scapy capture loop
+1. Open `http://localhost:5173`
+2. The **header** shows live status for API, Isolation Forest, GAT, and Capture
+3. Click **Start Monitoring** — the backend begins a Scapy capture loop (requires admin privileges)
 4. The **live network graph** populates automatically every 5 seconds
-5. **Click any node** → see IP stats and peer communications in the sidebar
-6. **Click any edge** → see full flow details with IF score, GAT score, and fused risk
-7. **Click any alert** → jumps to that flow's detail panel
+5. **Click any node** → IP stats, peer list, and recent communications in the sidebar
+6. **Click any edge** → full flow details: IF decision score, GAT attack score, and fused risk level
+7. **Click any alert** in the sidebar → jumps to that flow's detail panel
 8. **Flow table** at the bottom: search by IP or protocol, filter by risk level
-9. Click **Stop Monitoring** to halt capture cleanly
+9. Click **Stop Monitoring** to halt capture
 
-### Replay synthetic sample traffic
+### Demo Replay Mode
 
-Click **Replay Sample** to stream the labeled synthetic flows in `backend/data/demo_anomaly_flows.csv` through the same detection models and dashboard. The file includes ordinary examples and simulated port scans, login bursts, traffic floods, large transfers, and DNS bursts. This is flow-level demo data, not captured packets or model-training data; model results can include false positives and may vary with the installed models.
+Click **Replay Sample** to stream the labeled synthetic dataset (`backend/data/demo_anomaly_flows.csv`) through the same detection models. The dataset contains ~1000 flows across six scenarios:
+
+| Scenario | Risk Profile | Description |
+|----------|:---:|-------------|
+| `ordinary_traffic` | Low | Normal browsing / DNS |
+| `port_scan` | Medium | Single-packet probes across many ports |
+| `login_burst` | Medium | Rapid SSH login attempts |
+| `dns_burst` | Medium | High-volume DNS queries |
+| `syn_flood` | High | Massive SYN packet flood |
+| `traffic_flood` | High | Volumetric DDoS traffic |
+| `large_exfiltration` | High | Large outbound data transfer |
+
+> Demo mode does not require admin privileges or Npcap — flows are read from CSV and analysed by the models.
 
 ---
 
@@ -111,9 +177,10 @@ Click **Replay Sample** to stream the labeled synthetic flows in `backend/data/d
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/health` | Model + capture status |
-| `GET` | `/api/status` | Alias for health |
-| `POST` | `/api/monitor/start` | Start packet capture loop |
-| `POST` | `/api/monitor/stop` | Stop capture |
+| `GET` | `/api/status` | Alias for `/api/health` |
+| `POST` | `/api/monitor/start` | Start live packet capture |
+| `POST` | `/api/monitor/demo` | Start demo replay from CSV |
+| `POST` | `/api/monitor/stop` | Stop capture or demo |
 | `GET` | `/api/monitor/status` | Is capture running? |
 | `WS` | `/api/ws` | Live stream of `network_update` events |
 
@@ -122,6 +189,7 @@ Click **Replay Sample** to stream the labeled synthetic flows in `backend/data/d
 ```json
 {
   "type": "network_update",
+  "mode": "live",
   "timestamp": 1727318400.0,
   "window_duration": 5,
   "packets_captured": 120,
@@ -145,58 +213,132 @@ Click **Replay Sample** to stream the labeled synthetic flows in `backend/data/d
 }
 ```
 
+In demo mode, each flow also includes `"demo_scenario"` and `"expected_label"` fields.
+
 ---
 
 ## Model Files
 
-| File | Status |
-|------|--------|
-| `trained_models/gat/gat_model_leakage_safe.pt` | ✅ Present |
-| `trained_models/gat/gat_threshold.json` | ✅ Present |
-| `data/gat/gat_graph_leakage_safe.pt` | ✅ Present |
-| `trained_models/isolation_forest.pkl` | ⚠️ Missing — train to enable |
+| File | Description | Status |
+|------|-------------|--------|
+| `trained_models/gat/gat_model_leakage_safe.pt` | Leakage-safe GAT checkpoint | ✅ Present |
+| `trained_models/gat/gat_threshold.json` | GAT anomaly threshold | ✅ Present |
+| `data/gat/gat_graph_leakage_safe.pt` | GAT training graph | ✅ Present |
+| `trained_models/isolation_forest.pkl` | Trained Isolation Forest model | ✅ Present |
+
+### Training Data
+
+| File | Description |
+|------|-------------|
+| `data/normal_traffic.csv` | Normal flow data used to train the Isolation Forest |
+| `data/demo_anomaly_flows.csv` | Mixed-risk synthetic flows for demo replay (port scans, SYN floods, exfiltration, etc.) |
+| `data/normal_traffic_backup.csv` | Backup of normal training data |
+| `data/demo_anomaly_flows_backup.csv` | Backup of demo dataset |
+
+To regenerate the synthetic datasets:
+
+```powershell
+cd backend
+python process_data.py
+```
+
+To retrain the Isolation Forest:
+
+```powershell
+cd backend
+python -m app.models.train_isolation_forest
+```
 
 ---
 
 ## Project Structure
 
 ```
-Network_Traffic_visualiser_Minor_project/
+Network_Traffic_visualiser/
+├── .gitignore
+├── README.md
+├── index.js                        ← Root placeholder
+├── package.json                    ← Root package manifest
+├── npcap-1.89.exe                  ← Npcap installer (Windows)
+│
 ├── backend/
+│   ├── requirements.txt
+│   ├── process_data.py             ← Generate synthetic training & demo CSVs
 │   ├── app/
-│   │   ├── api/routes.py          ← FastAPI endpoints + WebSocket
+│   │   ├── __init__.py
+│   │   ├── main.py                 ← FastAPI app + CORS
+│   │   ├── api/
+│   │   │   └── routes.py           ← REST + WebSocket endpoints, demo replay
 │   │   ├── capture/
-│   │   │   ├── packet_capture.py  ← Scapy packet handler
-│   │   │   └── live_detection.py  ← CLI live detection (standalone)
+│   │   │   ├── packet_capture.py   ← Scapy packet handler + FlowProcessor
+│   │   │   └── live_detection.py   ← CLI live detection (standalone)
 │   │   ├── detection/
-│   │   │   ├── detection_engine.py ← IF + GAT fusion
+│   │   │   ├── detection_engine.py ← IF + GAT fusion engine
 │   │   │   └── alert_manager.py
 │   │   ├── features/
-│   │   │   ├── feature_extractor.py ← FlowProcessor
-│   │   │   └── data_collector.py
+│   │   │   ├── feature_extractor.py ← Flow feature extraction
+│   │   │   ├── data_collector.py
+│   │   │   └── test_feature_extractor.py
 │   │   ├── graph/
-│   │   │   └── live_graph_builder.py ← PyG graph from flows
-│   │   ├── models/
-│   │   │   ├── gat_model.py       ← GATNetwork definition
-│   │   │   ├── gat_inference.py   ← GATInference class
-│   │   │   └── isolation_forest.py
-│   │   └── main.py
-│   ├── data/gat/
-│   └── trained_models/gat/
+│   │   │   ├── __init__.py
+│   │   │   ├── live_graph_builder.py   ← Build PyG graph from flows
+│   │   │   └── build_leakage_safe_graph.py
+│   │   └── models/
+│   │       ├── gat_model.py           ← GATNetwork definition
+│   │       ├── gat_inference.py       ← GATInference class
+│   │       ├── isolation_forest.py    ← IF training, loading, prediction
+│   │       ├── train_isolation_forest.py
+│   │       ├── train_gat_leakage_safe.py
+│   │       ├── test_gat_inference.py
+│   │       ├── test_isolation_forest.py
+│   │       ├── gat_threshold_analysis_leakage_safe.py
+│   │       └── gat/
+│   │           ├── __init__.py
+│   │           ├── analyze_gat_dataset.py
+│   │           ├── check_missing_values.py
+│   │           └── inspect_webattacks.py
+│   ├── data/
+│   │   ├── normal_traffic.csv
+│   │   ├── normal_traffic_backup.csv
+│   │   ├── demo_anomaly_flows.csv
+│   │   ├── demo_anomaly_flows_backup.csv
+│   │   └── gat/
+│   │       ├── gat_graph.pt
+│   │       └── gat_graph_leakage_safe.pt
+│   └── trained_models/
+│       ├── isolation_forest.pkl
+│       └── gat/
+│           ├── .gitkeep
+│           ├── gat_model_leakage_safe.pt
+│           └── gat_threshold.json
 │
 └── frontend/
-    ├── src/
-    │   ├── App.tsx                ← Main dashboard
-    │   ├── components/
-    │   │   └── TrafficChart.tsx   ← Recharts live chart
-    │   ├── hooks/
-    │   │   └── useNetworkWebSocket.ts  ← WS with backoff
-    │   ├── services/
-    │   │   └── api.ts             ← REST client
-    │   └── types/
-    │       └── network.ts         ← TypeScript interfaces
+    ├── index.html
     ├── package.json
+    ├── package-lock.json
+    ├── tsconfig.json
+    ├── tsconfig.node.json
     ├── vite.config.ts
     ├── tailwind.config.js
-    └── tsconfig.json
+    ├── postcss.config.js
+    └── src/
+        ├── main.tsx                    ← React entry point
+        ├── index.css                   ← Tailwind directives
+        ├── App.tsx                     ← Main dashboard
+        ├── components/
+        │   └── TrafficChart.tsx        ← Recharts live chart (switchable metrics)
+        ├── hooks/
+        │   └── useNetworkWebSocket.ts  ← WebSocket with exponential backoff
+        ├── services/
+        │   └── api.ts                  ← REST API client
+        └── types/
+            └── network.ts              ← TypeScript interfaces
 ```
+
+---
+
+## Contributors
+
+- [chiranthanPN](https://github.com/chiranthanPN)
+- [vireshanand278](https://github.com/vireshanand278)
+- [yogeshperumal41-droid](https://github.com/yogeshperumal41-droid)
