@@ -50,40 +50,79 @@ RESET  = "\033[0m"
 def log(color, tag, msg):
     print(f"  {color}{BOLD}[{tag}]{RESET} {msg}", flush=True)
 
+def has_backend_deps(python_exe):
+    """Check if the given Python executable has uvicorn and fastapi installed."""
+    if not python_exe:
+        return False
+    try:
+        res = subprocess.run(
+            [python_exe, "-c", "import uvicorn, fastapi"],
+            capture_output=True,
+            timeout=4,
+        )
+        return res.returncode == 0
+    except Exception:
+        return False
+
 def find_python():
-    """Return the Python executable path that works on this system."""
+    """
+    Search for a working Python executable that actually has the project's
+    dependencies (uvicorn, fastapi) installed.
+    """
+    candidates = []
+
+    # 1. Current running interpreter
     if sys.executable and os.path.exists(sys.executable):
-        return sys.executable
+        candidates.append(sys.executable)
 
-    # Test py / python / python3 commands
-    for candidate in ("py", "python", "python3"):
-        path = shutil.which(candidate)
-        if path:
-            try:
-                res = subprocess.run([candidate, "-c", "import sys"], capture_output=True)
-                if res.returncode == 0:
-                    return candidate
-            except Exception:
-                pass
+    # 2. Well-known commands on PATH
+    for cmd in ("py", "python", "python3"):
+        path = shutil.which(cmd)
+        if path and path not in candidates:
+            candidates.append(cmd)
 
-    # Windows fallback for Local Programs install
+    # 3. Common Windows install locations
     local_app_data = os.environ.get("LOCALAPPDATA", "")
     if local_app_data:
         py313 = os.path.join(local_app_data, "Programs", "Python", "Python313", "python.exe")
-        if os.path.exists(py313):
-            return py313
-        py_dir = os.path.join(local_app_data, "Programs", "Python")
-        if os.path.isdir(py_dir):
-            for entry in os.listdir(py_dir):
-                candidate = os.path.join(py_dir, entry, "python.exe")
-                if os.path.exists(candidate):
-                    return candidate
+        if os.path.exists(py313) and py313 not in candidates:
+            candidates.append(py313)
+
+        prog_py_dir = os.path.join(local_app_data, "Programs", "Python")
+        if os.path.isdir(prog_py_dir):
+            for entry in os.listdir(prog_py_dir):
+                candidate = os.path.join(prog_py_dir, entry, "python.exe")
+                if os.path.exists(candidate) and candidate not in candidates:
+                    candidates.append(candidate)
+
+        py_bin_dir = os.path.join(local_app_data, "Python")
+        if os.path.isdir(py_bin_dir):
+            for entry in os.listdir(py_bin_dir):
+                candidate = os.path.join(py_bin_dir, entry, "python.exe")
+                if os.path.exists(candidate) and candidate not in candidates:
+                    candidates.append(candidate)
+
+    # First pass: Return the first candidate that has uvicorn & fastapi installed
+    for c in candidates:
+        if has_backend_deps(c):
+            return c
+
+    # Second pass: Fall back to any functional Python if deps are missing
+    for c in candidates:
+        try:
+            res = subprocess.run([c, "-c", "import sys"], capture_output=True, timeout=3)
+            if res.returncode == 0:
+                return c
+        except Exception:
+            pass
 
     return sys.executable or "python"
 
 def find_npm():
-    """Return the npm executable or None."""
-    return shutil.which("npm") or shutil.which("npm.cmd")
+    """Return the npm executable (preferring npm.cmd on Windows)."""
+    if os.name == "nt":
+        return shutil.which("npm.cmd") or shutil.which("npm")
+    return shutil.which("npm")
 
 def wait_for_backend(timeout=MAX_WAIT_SECS):
     """Poll the backend health endpoint until it responds 200."""
@@ -122,6 +161,14 @@ def main():
     if not os.path.isdir(FRONTEND_DIR):
         log(RED, "ERROR", f"Frontend directory not found: {FRONTEND_DIR}")
         sys.exit(1)
+
+    # Verify Python has required backend packages
+    if not has_backend_deps(python):
+        log(RED, "ERROR", f"Python executable '{python}' is missing required packages (uvicorn/fastapi).")
+        log(YELLOW, "HINT", f"Install them by running: {python} -m pip install -r backend/requirements.txt")
+        sys.exit(1)
+
+    log(GREEN, "PYTHON", f"Using Python: {python}")
 
     if npm is None:
         log(RED, "ERROR", "npm not found. Please install Node.js (v18+) and ensure npm is on PATH.")
