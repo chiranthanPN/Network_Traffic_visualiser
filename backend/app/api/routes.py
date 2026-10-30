@@ -87,6 +87,8 @@ async def capture_loop():
         flows = flow_processor.get_features()
         flow_processor.clear_flows()
         
+        captured_bytes = sum(int(f.get("byte_count", 0)) for f in flows) if flows else 0
+
         if flows:
             results = state.engine.analyze(flows)
         else:
@@ -103,6 +105,7 @@ async def capture_loop():
             "timestamp": time.time(),
             "window_duration": state.window_size,
             "packets_captured": captured,
+            "bytes_captured": captured_bytes,
             "total_flows": results["total_flows"],
             "anomalies": results["anomalies"],
             "risk_counts": counts,
@@ -165,6 +168,7 @@ async def demo_loop():
                 "timestamp": time.time(),
                 "window_duration": 2,
                 "packets_captured": sum(flow["packet_count"] for flow in flows),
+                "bytes_captured": sum(int(flow.get("byte_count", 0)) for flow in flows),
                 "total_flows": len(results["results"]),
                 "anomalies": risk_counts["MEDIUM"] + risk_counts["HIGH"],
                 "risk_counts": risk_counts,

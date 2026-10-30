@@ -1,18 +1,26 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { NetworkUpdate, FlowResult } from '../types/network';
+import { NetworkUpdate, FlowResult, ChartEntry } from '../types/network';
 
-export function useNetworkWebSocket(url: string) {
+interface WebSocketHookOptions {
+  onHighAlert?: (alertFlow: FlowResult) => void;
+}
+
+export function useNetworkWebSocket(url: string, options?: WebSocketHookOptions) {
   const [isConnected, setIsConnected] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<NetworkUpdate | null>(null);
   const [flows, setFlows] = useState<FlowResult[]>([]);
-  const [chartData, setChartData] = useState<any[]>([]);
+  const [chartData, setChartData] = useState<ChartEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const backoffRef = useRef(1000);
+  const onHighAlertRef = useRef(options?.onHighAlert);
+
+  useEffect(() => {
+    onHighAlertRef.current = options?.onHighAlert;
+  }, [options?.onHighAlert]);
 
   const connect = useCallback(() => {
-    // Don't double-connect
     if (wsRef.current && wsRef.current.readyState === WebSocket.CONNECTING) return;
 
     const ws = new WebSocket(url);
@@ -21,7 +29,7 @@ export function useNetworkWebSocket(url: string) {
     ws.onopen = () => {
       setIsConnected(true);
       setError(null);
-      backoffRef.current = 1000; // reset backoff
+      backoffRef.current = 1000;
     };
 
     ws.onmessage = (event) => {
@@ -38,22 +46,48 @@ export function useNetworkWebSocket(url: string) {
           setLastUpdate(update);
           setError(null);
 
+          // Tag flows with timestamp
+          const taggedFlows = update.flows.map(f => ({
+            ...f,
+            timestamp: f.timestamp || update.timestamp,
+          }));
+
+          // Fire toast / alert callback for any new HIGH risk flows in this window
+          if (onHighAlertRef.current) {
+            const highFlows = taggedFlows.filter(f => f.fusion.risk_level === 'HIGH');
+            highFlows.forEach(hf => {
+              onHighAlertRef.current?.(hf);
+            });
+          }
+
           setFlows((prev) => {
-            const merged = [...update.flows, ...prev];
+            const merged = [...taggedFlows, ...prev];
             return merged.slice(0, 1000);
           });
 
           setChartData((prev) => {
-            const now = new Date();
+            const now = new Date(update.timestamp * 1000);
             const pad = (n: number) => n.toString().padStart(2, '0');
             const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-            const entry = {
+            const windowDur = update.window_duration || 5;
+
+            const packetsPerSec = Math.round(update.packets_captured / windowDur);
+            const bytesPerSec = update.bytes_captured !== undefined
+              ? Math.round(update.bytes_captured / windowDur)
+              : Math.round(update.packets_captured * 64 / windowDur);
+
+            const entry: ChartEntry = {
               time: timeStr,
-              packetsPerSec: Math.round(update.packets_captured / (update.window_duration || 5)),
+              packetsPerSec,
+              bytesPerSec,
               totalFlows: update.total_flows,
               anomalies: update.anomalies,
+              lowRisk: update.risk_counts?.LOW || 0,
+              mediumRisk: update.risk_counts?.MEDIUM || 0,
+              highRisk: update.risk_counts?.HIGH || 0,
             };
-            return [...prev, entry].slice(-30); // rolling 30 windows
+
+            return [...prev, entry].slice(-40); // rolling 40 windows
           });
         }
       } catch (err) {
@@ -63,14 +97,13 @@ export function useNetworkWebSocket(url: string) {
 
     ws.onclose = () => {
       setIsConnected(false);
-      // Exponential back-off: 1s → 2s → 4s → … cap 16s
       const delay = Math.min(backoffRef.current, 16000);
       backoffRef.current = delay * 2;
       reconnectTimer.current = setTimeout(connect, delay);
     };
 
     ws.onerror = () => {
-      // onclose fires after onerror automatically
+      // handled by onclose
     };
   }, [url]);
 
@@ -79,7 +112,6 @@ export function useNetworkWebSocket(url: string) {
     return () => {
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       if (wsRef.current) {
-        // Prevent reconnect loop on unmount
         wsRef.current.onclose = null;
         wsRef.current.close();
       }

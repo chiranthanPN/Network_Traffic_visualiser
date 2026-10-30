@@ -27,11 +27,18 @@ export interface FlowResult {
   protocol: string;
   packet_count: number;
   byte_count: number;
+  duration?: number;
+  packets_per_second?: number;
+  bytes_per_second?: number;
+  average_packet_size?: number;
+  tcp_syn_count?: number;
+  tcp_rst_count?: number;
   isolation_forest: IsolationForestResult;
   gat: GATResult;
   fusion: FusionResult;
   demo_scenario?: string;
   expected_label?: 'NORMAL' | 'SYNTHETIC_ANOMALY';
+  timestamp?: number;
 }
 
 // ─── Window-level snapshot (one WebSocket message) ───────────────────────────
@@ -50,6 +57,7 @@ export interface NetworkUpdate {
   /** Seconds for this analysis window */
   window_duration: number;
   packets_captured: number;
+  bytes_captured?: number;
   total_flows: number;
   anomalies: number;
   risk_counts: RiskCounts;
@@ -65,11 +73,44 @@ export interface HealthStatus {
   gat: boolean;
 }
 
-// ─── Chart history entry ─────────────────────────────────────────────────────
+// ─── Chart history entry for multi-series analytics ──────────────────────────
 
 export interface ChartEntry {
   time: string;
   packetsPerSec: number;
+  bytesPerSec: number;
   totalFlows: number;
   anomalies: number;
+  lowRisk: number;
+  mediumRisk: number;
+  highRisk: number;
+}
+
+// ─── Persistent Graph Types ──────────────────────────────────────────────────
+
+export interface GraphNode {
+  id: string;
+  risk: 'LOW' | 'MEDIUM' | 'HIGH';
+  isInternal: boolean;
+  flows: number;
+  packetCount: number;
+  byteCount: number;
+  lastSeen: number; // timestamp ms
+  isHighPulsing?: boolean;
+  isNewAlert?: boolean;
+  x?: number;
+  y?: number;
+  vx?: number;
+  vy?: number;
+}
+
+export interface GraphLink {
+  source: string | GraphNode;
+  target: string | GraphNode;
+  risk: 'LOW' | 'MEDIUM' | 'HIGH';
+  flow: FlowResult;
+  byteCount: number;
+  packetCount: number;
+  curvature?: number;
+  lastSeen: number;
 }
