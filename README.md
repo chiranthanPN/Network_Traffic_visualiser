@@ -260,8 +260,6 @@ In demo mode, each flow also includes `"demo_scenario"` and `"expected_label"` f
 |------|-------------|
 | `data/normal_traffic.csv` | Normal flow data used to train the Isolation Forest |
 | `data/demo_anomaly_flows.csv` | Mixed-risk synthetic flows for demo replay (port scans, SYN floods, exfiltration, etc.) |
-| `data/normal_traffic_backup.csv` | Backup of normal training data |
-| `data/demo_anomaly_flows_backup.csv` | Backup of demo dataset |
 
 To regenerate the synthetic datasets:
 
@@ -287,8 +285,6 @@ Network_Traffic_visualiser/
 ├── README.md
 ├── run.py                          ← Unified single-command launcher (backend + health check + frontend)
 ├── run.bat                         ← Windows one-click launcher
-├── index.js                        ← Root placeholder
-├── package.json                    ← Root package manifest
 ├── npcap-1.89.exe                  ← Npcap installer (Windows)
 │
 ├── backend/
@@ -329,9 +325,7 @@ Network_Traffic_visualiser/
 │   │           └── inspect_webattacks.py
 │   ├── data/
 │   │   ├── normal_traffic.csv
-│   │   ├── normal_traffic_backup.csv
 │   │   ├── demo_anomaly_flows.csv
-│   │   ├── demo_anomaly_flows_backup.csv
 │   │   └── gat/
 │   │       ├── gat_graph.pt
 │   │       └── gat_graph_leakage_safe.pt
@@ -353,16 +347,28 @@ Network_Traffic_visualiser/
     ├── postcss.config.js
     └── src/
         ├── main.tsx                    ← React entry point
-        ├── index.css                   ← Tailwind directives
-        ├── App.tsx                     ← Main dashboard
+        ├── index.css                   ← Tailwind + Inter / JetBrains Mono fonts
+        ├── App.tsx                     ← Main dashboard orchestrator
         ├── components/
-        │   └── TrafficChart.tsx        ← Recharts live chart (switchable metrics)
+        │   ├── Header.tsx              ← Status, sound, 2D/3D toggle, tabs
+        │   ├── MetricsRibbon.tsx       ← Responsive metrics, real bytes, sparklines
+        │   ├── NetworkGraph.tsx        ← Persistent graph, radar sweep, 2D/3D
+        │   ├── FlowTable.tsx           ← Virtualized sortable table with risk chips
+        │   ├── analytics/
+        │   │   └── VisualAnalytics.tsx ← Stacked area timeline, donut & bar charts
+        │   └── sidebar/
+        │       ├── NodeDetails.tsx     ← Host IP inspection, peers, RFC1918 badge
+        │       ├── FlowDetails.tsx     ← GAT/IF threshold score bars & consensus
+        │       └── AlertsFeed.tsx      ← Aggressor grouping, attack icons, relative time
         ├── hooks/
-        │   └── useNetworkWebSocket.ts  ← WebSocket with exponential backoff
+        │   └── useNetworkWebSocket.ts  ← WebSocket with backoff & alert callbacks
         ├── services/
         │   └── api.ts                  ← REST API client
-        └── types/
-            └── network.ts              ← TypeScript interfaces
+        ├── types/
+        │   └── network.ts              ← TypeScript interfaces
+        └── utils/
+            ├── audio.ts                ← Web Audio API alert sound synthesizer
+            └── network.ts              ← RFC1918 IP classifier & formatters
 ```
 
 ---
