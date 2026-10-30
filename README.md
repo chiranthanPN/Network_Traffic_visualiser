@@ -124,23 +124,23 @@ run.bat
 
 ---
 
-### Alternative: Manual Start (Separate Terminals)
+### Alternatively, It Can Be Run Separately (As Done Previously)
 
-If you prefer running services independently:
+If you prefer running the backend and frontend manually in separate terminal windows:
 
-#### 1 — Backend
+#### Step 1 — Backend (Terminal 1)
 
 ```powershell
 cd backend
 
-# Install Python dependencies (first time)
+# Install Python dependencies (first time only)
 pip install -r requirements.txt
 
-# Start the API server (as Administrator for live capture)
+# Start the API server (run as Administrator for live packet capture)
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-Verify:
+Verify the backend is up:
 
 ```
 GET http://localhost:8000/api/health
@@ -154,15 +154,15 @@ cd backend
 python -m app.models.train_isolation_forest
 ```
 
-#### 2 — Frontend
+#### Step 2 — Frontend (Terminal 2)
 
 ```powershell
 cd frontend
 
-# Install Node packages (first time)
+# Install Node packages (first time only)
 npm install
 
-# Start the dev server
+# Start the development server
 npm run dev
 ```
 
