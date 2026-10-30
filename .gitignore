@@ -30,3 +30,5 @@ frontend/.vite/
 Thumbs.db
 *.pcap_ISCX.csv
 backend/*.pcap_ISCX.csv
+
+
