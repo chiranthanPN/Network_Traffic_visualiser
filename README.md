@@ -100,7 +100,35 @@ The `DetectionEngine` fuses both model decisions per flow:
 
 ## Setup & Run
 
-### 1 — Backend
+### Quick Start (Single-Command Launcher)
+
+To run the entire project in proper sequence without managing separate terminal windows:
+
+```powershell
+# Run the root launcher (starts backend first, verifies health, then starts frontend)
+python run.py
+```
+
+Or on Windows:
+```cmd
+run.bat
+```
+
+> **What the launcher does automatically:**
+> 1. Verifies Python and Node.js/npm environments.
+> 2. Auto-installs frontend dependencies (`npm install`) if `node_modules` is missing.
+> 3. Starts the FastAPI backend on `http://localhost:8000`.
+> 4. Polls `/api/health` until the ML models (GAT + Isolation Forest) and API report healthy.
+> 5. Starts the Vite frontend on `http://localhost:5173`.
+> 6. Shuts both servers down cleanly on `Ctrl+C`.
+
+---
+
+### Alternative: Manual Start (Separate Terminals)
+
+If you prefer running services independently:
+
+#### 1 — Backend
 
 ```powershell
 cd backend
@@ -126,7 +154,7 @@ cd backend
 python -m app.models.train_isolation_forest
 ```
 
-### 2 — Frontend
+#### 2 — Frontend
 
 ```powershell
 cd frontend
@@ -257,6 +285,8 @@ python -m app.models.train_isolation_forest
 Network_Traffic_visualiser/
 ├── .gitignore
 ├── README.md
+├── run.py                          ← Unified single-command launcher (backend + health check + frontend)
+├── run.bat                         ← Windows one-click launcher
 ├── index.js                        ← Root placeholder
 ├── package.json                    ← Root package manifest
 ├── npcap-1.89.exe                  ← Npcap installer (Windows)
