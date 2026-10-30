@@ -124,7 +124,7 @@ run.bat
 
 ---
 
-### Alternatively, It Can Be Run Separately (As Done Previously)
+### Alternatively, It Can Be Run Separately.
 
 If you prefer running the backend and frontend manually in separate terminal windows:
 
