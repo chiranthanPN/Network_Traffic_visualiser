@@ -83,7 +83,7 @@ function MetricCard({
   valueColor = 'text-gray-100',
   delta,
   sparkData = [],
-  sparkColor = '#3B82F6',
+  sparkColor = '#2472f4',
   glow = false,
 }: MetricCardProps) {
   return (

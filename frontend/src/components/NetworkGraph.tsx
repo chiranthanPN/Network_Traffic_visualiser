@@ -480,11 +480,11 @@ export function NetworkGraph({
           graphData={filteredData}
           nodeLabel={(n: any) => `${n.id} (${n.risk})`}
           nodeColor={(n: any) =>
-            n.id === selectedNode ? '#FFFFFF' : n.risk === 'HIGH' ? '#EF4444' : n.risk === 'MEDIUM' ? '#F59E0B' : '#3B82F6'
+            n.id === selectedNode ? '#FFFFFF' : n.risk === 'HIGH' ? '#ec5a5a' : n.risk === 'MEDIUM' ? '#c48c2c' : '#15e437'
           }
           nodeVal={(n: any) => Math.max(3, Math.log2((n.packetCount || 1) + 1) * 3)}
           linkColor={(l: any) =>
-            l.risk === 'HIGH' ? 'rgba(239,68,68,0.8)' : l.risk === 'MEDIUM' ? 'rgba(245,158,11,0.6)' : 'rgba(59,130,246,0.3)'
+            l.risk === 'HIGH' ? 'rgb(241 240 12 / 0.8)' : l.risk === 'MEDIUM' ? 'rgb(122 226 214 / 0.6)' : 'rgb(7 7 248 / 0.3)'
           }
           linkWidth={(l: any) => (l.risk === 'HIGH' ? 2.5 : 1)}
           linkDirectionalParticles={2}
