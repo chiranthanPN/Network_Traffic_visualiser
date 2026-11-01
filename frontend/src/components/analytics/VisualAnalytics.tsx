@@ -116,8 +116,8 @@ export function VisualAnalytics({ chartData, flows }: VisualAnalyticsProps) {
                 <YAxis stroke="#4B5563" tick={{ fontSize: 9, fill: '#9CA3AF' }} tickLine={false} />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#151C2C',
-                    borderColor: '#2A3655',
+                    backgroundColor: '#c0d7f9',
+                    borderColor: '#13ddc3',
                     borderRadius: 8,
                     fontSize: 11,
                     color: '#E5E7EB',
@@ -163,7 +163,7 @@ export function VisualAnalytics({ chartData, flows }: VisualAnalyticsProps) {
                   <Tooltip
                     contentStyle={{
                       backgroundColor: '#151C2C',
-                      borderColor: '#2A3655',
+                      borderColor: '#2464ff',
                       borderRadius: 8,
                       fontSize: 11,
                     }}
@@ -199,7 +199,7 @@ export function VisualAnalytics({ chartData, flows }: VisualAnalyticsProps) {
                   <XAxis type="number" hide />
                   <YAxis dataKey="ip" type="category" stroke="#9CA3AF" tick={{ fontSize: 9, fill: '#E5E7EB' }} tickLine={false} width={80} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: '#151C2C', borderColor: '#2A3655', borderRadius: 8, fontSize: 11 }}
+                    contentStyle={{ backgroundColor: '#f6f6f6', borderColor: '#4105b0', borderRadius: 8, fontSize: 11 }}
                     formatter={(val: any) => [formatBytes(val), 'Volume']}
                   />
                   <Bar dataKey="bytes" fill="#3B82F6" radius={[0, 4, 4, 0]} />
@@ -229,7 +229,7 @@ export function VisualAnalytics({ chartData, flows }: VisualAnalyticsProps) {
                   <XAxis dataKey="port" stroke="#9CA3AF" tick={{ fontSize: 9, fill: '#E5E7EB' }} tickLine={false} />
                   <YAxis stroke="#4B5563" tick={{ fontSize: 9 }} tickLine={false} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: '#151C2C', borderColor: '#2A3655', borderRadius: 8, fontSize: 11 }}
+                    contentStyle={{ backgroundColor: '#f6f6f6', borderColor: '#4105b0', borderRadius: 8, fontSize: 11 }}
                     formatter={(val: any) => [val.toLocaleString(), 'Packets']}
                   />
                   <Bar dataKey="count" fill="#06B6D4" radius={[4, 4, 0, 0]} />
