@@ -21,11 +21,6 @@ DATASET_METADATA = {
         "description": "Multi-scenario attack traffic with port scans, SYN floods, login bursts, and exfiltration",
         "category": "threats"
     },
-    "network_traffic_demo2.csv": {
-        "name": "Synthetic Traffic Flow Sample 2",
-        "description": "Multi-pattern network traffic with varying volume and connection bursts",
-        "category": "mixed"
-    },
     "normal_traffic.csv": {
         "name": "Normal Baseline Traffic",
         "description": "Ordinary benign web browsing, HTTPS requests, and DNS lookups",
