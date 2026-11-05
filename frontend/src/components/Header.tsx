@@ -3,7 +3,7 @@ import {
   Shield, Play, Square, Wifi, WifiOff, Volume2, VolumeX,
   RotateCcw, Box, Eye
 } from 'lucide-react';
-import { HealthStatus } from '../types/network';
+import { HealthStatus, DatasetOption } from '../types/network';
 
 interface HeaderProps {
   backendUp: boolean | null;
@@ -15,6 +15,10 @@ interface HeaderProps {
   soundEnabled: boolean;
   is3D: boolean;
   activeTab: 'graph' | 'analytics' | 'table';
+  datasets?: DatasetOption[];
+  selectedDataset?: string;
+  activeDatasetName?: string;
+  onSelectDataset?: (id: string) => void;
   onToggleSound: () => void;
   onToggle3D: () => void;
   onTabChange: (tab: 'graph' | 'analytics' | 'table') => void;
@@ -55,6 +59,10 @@ export function Header({
   soundEnabled,
   is3D,
   activeTab,
+  datasets = [],
+  selectedDataset,
+  activeDatasetName,
+  onSelectDataset,
   onToggleSound,
   onToggle3D,
   onTabChange,
@@ -72,7 +80,9 @@ export function Header({
     }
     if (isMonitoring && isConnected) {
       return {
-        label: isDemoMode ? '● DEMO REPLAY' : '● LIVE MONITORING',
+        label: isDemoMode
+          ? (activeDatasetName ? `● DEMO: ${activeDatasetName}` : '● DEMO REPLAY')
+          : '● LIVE MONITORING',
         cls: 'bg-low/20 text-low border-low/50 shadow-[0_0_8px_rgba(16,185,129,0.35)]',
       };
     }
@@ -193,13 +203,37 @@ export function Header({
 
         {!isMonitoring ? (
           <>
-            <button
-              onClick={onDemo}
-              disabled={isStarting || backendUp === false}
-              className="flex items-center gap-1.5 border border-border/90 hover:border-primary/80 disabled:opacity-40 px-3 py-1.5 rounded text-gray-200 text-xs font-medium transition-colors bg-panel/50 hover:bg-panel"
-            >
-              <Play className="w-3 h-3 text-medium" /> Replay Sample
-            </button>
+            {/* Dataset selection & Demo replay */}
+            <div className="flex items-center bg-panel/80 border border-border/90 rounded-md overflow-hidden shadow-inner focus-within:border-primary/50 transition-colors">
+              <select
+                value={selectedDataset}
+                onChange={(e) => onSelectDataset?.(e.target.value)}
+                disabled={isStarting || backendUp === false}
+                className="bg-transparent text-xs text-gray-200 px-2 py-1.5 focus:outline-none cursor-pointer max-w-[170px] truncate border-r border-border/60 disabled:opacity-40"
+                title="Select dataset to stream in demo replay"
+              >
+                {datasets && datasets.length > 0 ? (
+                  datasets.map((d) => (
+                    <option key={d.id} value={d.id} className="bg-[#0f172a] text-gray-200 py-1">
+                      {d.name}
+                    </option>
+                  ))
+                ) : (
+                  <option value="demo_anomaly_flows.csv" className="bg-[#0f172a] text-gray-200">
+                    Mixed Threats (1000 flows)
+                  </option>
+                )}
+              </select>
+              <button
+                onClick={onDemo}
+                disabled={isStarting || backendUp === false}
+                title="Replay selected dataset through AI detection pipeline"
+                className="flex items-center gap-1 hover:bg-medium/20 text-medium disabled:opacity-40 px-2.5 py-1.5 text-xs font-medium transition-colors"
+              >
+                <Play className="w-3 h-3 fill-current" />
+                <span>Replay</span>
+              </button>
+            </div>
 
             <button
               onClick={onStart}

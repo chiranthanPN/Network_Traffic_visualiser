@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Toaster, toast } from 'sonner';
 import { AlertTriangle } from 'lucide-react';
 import { useNetworkWebSocket } from './hooks/useNetworkWebSocket';
-import { getHealth, startDemo, startMonitor, stopMonitor } from './services/api';
-import { HealthStatus, FlowResult } from './types/network';
+import { getHealth, getDatasets, startDemo, startMonitor, stopMonitor } from './services/api';
+import { HealthStatus, FlowResult, DatasetOption } from './types/network';
 import { soundManager } from './utils/audio';
 
 import { Header } from './components/Header';
@@ -19,6 +19,10 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [is3D, setIs3D] = useState(false);
   const [activeTab, setActiveTab] = useState<'graph' | 'analytics' | 'table'>('graph');
+
+  // Datasets for sample replay
+  const [datasets, setDatasets] = useState<DatasetOption[]>([]);
+  const [selectedDataset, setSelectedDataset] = useState<string>('demo_anomaly_flows.csv');
 
   // Trigger Sonner toast and audio on new HIGH alert
   const handleHighAlert = useCallback((flow: FlowResult) => {
@@ -64,6 +68,20 @@ export default function App() {
     poll();
     const iv = setInterval(poll, 5000);
     return () => clearInterval(iv);
+  }, []);
+
+  // ── Dataset Options Fetching ─────────────────────────────────────────────────
+  useEffect(() => {
+    getDatasets()
+      .then((data) => {
+        if (data && data.length > 0) {
+          setDatasets(data);
+          setSelectedDataset(data[0].id);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load datasets:', err);
+      });
   }, []);
 
   // ── Keyboard Shortcuts (Space, /, Esc) ──────────────────────────────────────
@@ -123,9 +141,10 @@ export default function App() {
   const handleDemo = async () => {
     setIsStarting(true);
     try {
-      await startDemo();
+      const chosen = datasets.find(d => d.id === selectedDataset);
+      await startDemo(selectedDataset);
       setIsMonitoring(true);
-      toast.info('Streaming synthetic threat dataset');
+      toast.info(`Streaming ${chosen ? chosen.name : selectedDataset}`);
     } catch {
       toast.error('Failed to start demo replay');
     } finally {
@@ -162,6 +181,13 @@ export default function App() {
 
   const activeConnections = lastUpdate?.flows?.length || 0;
 
+  // Active dataset display label
+  const activeDatasetDisplayName = useMemo(() => {
+    const targetId = lastUpdate?.dataset_name || selectedDataset;
+    const match = datasets.find(d => d.id === targetId);
+    return match ? match.name : targetId;
+  }, [lastUpdate?.dataset_name, selectedDataset, datasets]);
+
   return (
     <div className="h-screen w-screen flex flex-col font-sans bg-background text-gray-200 overflow-hidden select-auto">
       {/* Toast Notification Container */}
@@ -178,6 +204,10 @@ export default function App() {
         soundEnabled={soundEnabled}
         is3D={is3D}
         activeTab={activeTab}
+        datasets={datasets}
+        selectedDataset={selectedDataset}
+        activeDatasetName={activeDatasetDisplayName}
+        onSelectDataset={setSelectedDataset}
         onToggleSound={handleToggleSound}
         onToggle3D={handleToggle3D}
         onTabChange={setActiveTab}

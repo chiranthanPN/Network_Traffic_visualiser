@@ -1,4 +1,4 @@
-import { HealthStatus } from '../types/network';
+import { HealthStatus, DatasetOption } from '../types/network';
 
 const API_BASE = 'http://localhost:8000/api';
 
@@ -7,13 +7,21 @@ export async function getHealth(): Promise<HealthStatus> {
   return res.json();
 }
 
+export async function getDatasets(): Promise<DatasetOption[]> {
+  const res = await fetch(`${API_BASE}/datasets`);
+  return res.json();
+}
+
 export async function startMonitor(): Promise<{status: string}> {
   const res = await fetch(`${API_BASE}/monitor/start`, { method: 'POST' });
   return res.json();
 }
 
-export async function startDemo(): Promise<{status: string}> {
-  const res = await fetch(`${API_BASE}/monitor/demo`, { method: 'POST' });
+export async function startDemo(datasetId?: string): Promise<{status: string; dataset?: string}> {
+  const url = datasetId
+    ? `${API_BASE}/monitor/demo?dataset=${encodeURIComponent(datasetId)}`
+    : `${API_BASE}/monitor/demo`;
+  const res = await fetch(url, { method: 'POST' });
   return res.json();
 }
 

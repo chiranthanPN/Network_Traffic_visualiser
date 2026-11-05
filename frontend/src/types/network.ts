@@ -49,9 +49,17 @@ export interface RiskCounts {
   HIGH: number;
 }
 
+export interface DatasetOption {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+}
+
 export interface NetworkUpdate {
   type: 'network_update';
   mode?: 'live' | 'demo';
+  dataset_name?: string;
   /** Unix timestamp (seconds) */
   timestamp: number;
   /** Seconds for this analysis window */
