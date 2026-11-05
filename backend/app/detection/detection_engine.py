@@ -246,61 +246,52 @@ class DetectionEngine:
     @staticmethod
     def _fuse_results(
         isolation_result,
-        gat_result,
-        flow=None
+        gat_result
     ):
-        scenario = flow.get("scenario") if flow else None
+
+        isolation_anomaly = (
+            isolation_result["is_anomaly"]
+        )
+
+        gat_anomaly = False
+
+        if gat_result is not None:
+
+            gat_anomaly = (
+                gat_result["is_anomaly"]
+            )
 
         # ---------------------------------------------------------
-        # 1. DEMO / SYNTHETIC REPLAY (Guarantees exact 30/30/40 ratio)
+        # BOTH MODELS FLAG ANOMALY
         # ---------------------------------------------------------
-        if scenario:
-            if scenario in ["ordinary_traffic"]:
-                return {
-                    "isolation_forest_anomaly": False,
-                    "gat_anomaly": False,
-                    "risk_level": "LOW"
-                }
-            elif scenario in ["dns_burst", "login_burst"]:
-                return {
-                    "isolation_forest_anomaly": isolation_result.get("is_anomaly", True),
-                    "gat_anomaly": gat_result.get("is_anomaly", False) if gat_result else False,
-                    "risk_level": "MEDIUM"
-                }
-            elif scenario in ["traffic_flood", "syn_flood", "port_scan", "large_exfiltration"]:
-                return {
-                    "isolation_forest_anomaly": True,
-                    "gat_anomaly": True,
-                    "risk_level": "HIGH"
-                }
 
-        # ---------------------------------------------------------
-        # 2. LIVE CAPTURE FALLBACK (Physical metrics + Model scores)
-        # ---------------------------------------------------------
-        isolation_anomaly = isolation_result.get("is_anomaly", False)
-        isolation_score = isolation_result.get("decision_score", 0.0)
+        if isolation_anomaly and gat_anomaly:
 
-        gat_anomaly = gat_result.get("is_anomaly", False) if gat_result else False
-        gat_score = gat_result.get("attack_score", 0.0) if gat_result else 0.0
-
-        pps = float(flow.get("packets_per_second", 0)) if flow else 0.0
-        syn_count = int(flow.get("tcp_syn_count", 0)) if flow else 0
-        ports = int(flow.get("unique_destination_ports", 1)) if flow else 1
-        bytes_count = int(flow.get("byte_count", 0)) if flow else 0
-
-        # HIGH: Severe attack signatures
-        if (gat_score >= 0.70) or (isolation_score <= -0.20) or (syn_count >= 1000) or (ports >= 15) or (pps >= 2000) or (bytes_count >= 20_000_000):
             risk_level = "HIGH"
-        # MEDIUM: Moderate bursts
-        elif (gat_score >= 0.45) or (isolation_score <= -0.05) or (syn_count >= 100) or (pps >= 100):
+
+        # ---------------------------------------------------------
+        # ONLY ONE MODEL FLAGS ANOMALY
+        # ---------------------------------------------------------
+
+        elif isolation_anomaly or gat_anomaly:
+
             risk_level = "MEDIUM"
-        # LOW: Normal benign baseline
+
+        # ---------------------------------------------------------
+        # BOTH MODELS CONSIDER TRAFFIC NORMAL
+        # ---------------------------------------------------------
+
         else:
+
             risk_level = "LOW"
 
         return {
-            "isolation_forest_anomaly": isolation_anomaly,
-            "gat_anomaly": gat_anomaly,
+            "isolation_forest_anomaly": (
+                isolation_anomaly
+            ),
+            "gat_anomaly": (
+                gat_anomaly
+            ),
             "risk_level": risk_level
         }
 
@@ -369,14 +360,9 @@ class DetectionEngine:
             # Fusion
             # -----------------------------------------------------
 
-            # -----------------------------------------------------
-            # Fusion
-            # -----------------------------------------------------
-
             fusion = self._fuse_results(
                 isolation_results[index],
-                gat_result,
-                flow              # <--- Add this argument here
+                gat_result
             )
 
             # -----------------------------------------------------
