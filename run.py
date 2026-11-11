@@ -170,6 +170,14 @@ def main():
 
     log(GREEN, "PYTHON", f"Using Python: {python}")
 
+    if sys.platform == "darwin":
+        bpf0 = "/dev/bpf0"
+        if os.path.exists(bpf0) and not (os.access(bpf0, os.R_OK) and os.access(bpf0, os.W_OK)):
+            log(CYAN, "BPF", "macOS BPF status: Standard user (Zero-privilege Live System Sniffer will be used).")
+            log(YELLOW, "HINT", "To unlock raw promiscuous BPF frame capture, run: ./fix_permissions.sh")
+        else:
+            log(GREEN, "BPF", "macOS BPF permissions: Read/Write accessible [OK]")
+
     if npm is None:
         log(RED, "ERROR", "npm not found. Please install Node.js (v18+) and ensure npm is on PATH.")
         sys.exit(1)
@@ -200,6 +208,7 @@ def main():
         "app.main:app",
         "--host", "0.0.0.0",
         "--port", str(BACKEND_PORT),
+        "--reload",
     ]
 
     creation_flags = 0

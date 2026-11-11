@@ -17,15 +17,15 @@ class GATInference:
 
     def __init__(
         self,
-        model_path="trained_models/gat/gat_model_leakage_safe.pt",
-        threshold_path="trained_models/gat/gat_threshold.json",
-        graph_path="data/gat/gat_graph_leakage_safe.pt",
+        model_path=None,
+        threshold_path=None,
+        graph_path=None,
         device=None
     ):
-
-        self.model_path = Path(model_path)
-        self.threshold_path = Path(threshold_path)
-        self.graph_path = Path(graph_path)
+        base_dir = Path(__file__).resolve().parents[2]
+        self.model_path = Path(model_path) if model_path else base_dir / "trained_models/gat/gat_model_leakage_safe.pt"
+        self.threshold_path = Path(threshold_path) if threshold_path else base_dir / "trained_models/gat/gat_threshold.json"
+        self.graph_path = Path(graph_path) if graph_path else base_dir / "data/gat/gat_graph_leakage_safe.pt"
 
         # =========================================================
         # DEVICE

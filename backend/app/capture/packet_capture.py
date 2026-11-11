@@ -1,8 +1,55 @@
-from scapy.all import sniff, IP, TCP, UDP
+import os
+from scapy.all import sniff, IP, TCP, UDP, Raw
 
 from app.features.feature_extractor import FlowProcessor
-
 from app.features.data_collector import save_features
+from app.detection.fake_website_detector import fake_website_detector
+
+
+def can_sniff_scapy() -> bool:
+    """Check if Scapy raw packet sniffing has appropriate OS permissions."""
+    try:
+        if os.name != "nt" and os.path.exists("/dev/bpf0"):
+            if not (os.access("/dev/bpf0", os.R_OK) and os.access("/dev/bpf0", os.W_OK)):
+                return False
+        # Quick non-blocking probe
+        sniff(count=1, timeout=0.05, store=False)
+        return True
+    except Exception:
+        return False
+
+
+def parse_tls_sni(payload: bytes):
+    """Extract Server Name Indication (SNI) from TLS Client Hello packets."""
+    try:
+        if len(payload) < 43 or payload[0] != 0x16 or payload[5] != 0x01:
+            return None
+        session_id_len = payload[43]
+        idx = 44 + session_id_len
+        if idx + 2 > len(payload):
+            return None
+        cipher_suites_len = int.from_bytes(payload[idx:idx + 2], "big")
+        idx += 2 + cipher_suites_len
+        if idx + 1 > len(payload):
+            return None
+        comp_methods_len = payload[idx]
+        idx += 1 + comp_methods_len
+        if idx + 2 > len(payload):
+            return None
+        exts_len = int.from_bytes(payload[idx:idx + 2], "big")
+        idx += 2
+        end_exts = idx + exts_len
+        while idx + 4 <= end_exts and idx + 4 <= len(payload):
+            ext_type = int.from_bytes(payload[idx:idx + 2], "big")
+            ext_len = int.from_bytes(payload[idx + 2:idx + 4], "big")
+            idx += 4
+            if ext_type == 0 and idx + 5 <= len(payload):
+                name_len = int.from_bytes(payload[idx + 3:idx + 5], "big")
+                return payload[idx + 5:idx + 5 + name_len].decode("utf-8", errors="ignore")
+            idx += ext_len
+    except Exception:
+        pass
+    return None
 
 
 # ============================================================
@@ -66,6 +113,16 @@ def process_packet(packet):
 
         tcp_syn = "S" in flags
         tcp_rst = "R" in flags
+
+        # Inspect TLS SNI for fake website detection
+        if Raw in packet:
+            try:
+                payload = bytes(packet[Raw])
+                sni = parse_tls_sni(payload)
+                if sni:
+                    fake_website_detector.register_ip_for_domain(destination_ip, sni)
+            except Exception:
+                pass
 
     # --------------------------------------------------------
     # UDP

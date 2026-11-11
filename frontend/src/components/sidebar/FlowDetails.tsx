@@ -88,6 +88,26 @@ export function FlowDetails({ flow, onClose, onSelectNode }: FlowDetailsProps) {
         </div>
       </div>
 
+      {/* Fake Website Threat Details */}
+      {flow.fake_website && flow.fake_website.is_fake && (
+        <div className="bg-amber-500/15 border border-amber-500/50 p-3 rounded-lg mb-3 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-amber-400 text-xs flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4 animate-bounce" />
+              <span>Fake / Demo Site Detected</span>
+            </span>
+            <span className="px-1.5 py-0.2 rounded bg-amber-500/30 text-amber-200 border border-amber-500/50 font-mono text-[9px] font-bold">
+              HIGH RISK
+            </span>
+          </div>
+          <div className="text-white font-bold text-xs">{flow.fake_website.site_name}</div>
+          <div className="text-[10px] text-amber-200/90 font-medium">{flow.fake_website.category}</div>
+          <p className="text-[10px] text-gray-300 leading-normal pt-1 border-t border-amber-500/30">
+            {flow.fake_website.warning}
+          </p>
+        </div>
+      )}
+
       {/* ── AI MODEL CONSENSUS DISPLAY ────────────────────────────────────── */}
       <div className="bg-background/80 p-3 rounded-lg border border-border/70 mb-3 space-y-3">
         <div className="flex items-center justify-between">

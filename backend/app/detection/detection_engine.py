@@ -4,6 +4,7 @@ from pathlib import Path
 
 from app.models.gat_inference import GATInference
 from app.graph.live_graph_builder import LiveGraphBuilder
+from app.detection.fake_website_detector import fake_website_detector
 
 
 class DetectionEngine:
@@ -38,13 +39,13 @@ class DetectionEngine:
 
     def __init__(
         self,
-        isolation_forest_path=(
-            "trained_models/isolation_forest.pkl"
-        )
+        isolation_forest_path=None
     ):
-
-        self.isolation_forest_path = Path(
-            isolation_forest_path
+        base_dir = Path(__file__).resolve().parents[2]
+        self.isolation_forest_path = (
+            Path(isolation_forest_path)
+            if isolation_forest_path
+            else base_dir / "trained_models/isolation_forest.pkl"
         )
 
         # =========================================================
@@ -249,6 +250,15 @@ class DetectionEngine:
         gat_result,
         flow=None
     ):
+        # ---------------------------------------------------------
+        # 0. FAKE / DEMO WEBSITE DETECTION (High Priority Alert)
+        # ---------------------------------------------------------
+        if flow and flow.get("fake_website"):
+            return {
+                "isolation_forest_anomaly": True,
+                "gat_anomaly": True,
+                "risk_level": "HIGH"
+            }
         isolation_anomaly = isolation_result.get("is_anomaly", False)
         isolation_score = isolation_result.get("decision_score", 0.0)
 
@@ -329,31 +339,18 @@ class DetectionEngine:
         final_results = []
 
         for index, flow in enumerate(flows):
+            source_ip = flow.get("source_ip")
+            destination_ip = flow.get("destination_ip")
 
-            source_ip = flow.get(
-                "source_ip"
-            )
+            # Check for fake website match if not already tagged
+            if not flow.get("fake_website"):
+                detected_fake = fake_website_detector.inspect_flow(flow)
+                if detected_fake:
+                    flow["fake_website"] = detected_fake
 
-            destination_ip = flow.get(
-                "destination_ip"
-            )
-
-            # -----------------------------------------------------
             # Find GAT result for this communication pair
-            # -----------------------------------------------------
-
-            gat_key = (
-                source_ip,
-                destination_ip
-            )
-
-            gat_result = gat_results.get(
-                gat_key
-            )
-
-            # -----------------------------------------------------
-            # Fusion
-            # -----------------------------------------------------
+            gat_key = (source_ip, destination_ip)
+            gat_result = gat_results.get(gat_key)
 
             fusion = self._fuse_results(
                 isolation_results[index],
@@ -361,43 +358,35 @@ class DetectionEngine:
                 flow
             )
 
-            # -----------------------------------------------------
-            # Final result
-            # -----------------------------------------------------
+            gat_threshold = (
+                gat_result["threshold"]
+                if gat_result
+                else (self.gat.threshold if self.gat else 0.45)
+            )
 
             result = {
                 "source_ip": source_ip,
                 "destination_ip": destination_ip,
-                "source_port": flow.get(
-                    "source_port"
-                ),
-                "destination_port": flow.get(
-                    "destination_port"
-                ),
-                "protocol": flow.get(
-                    "protocol"
-                ),
-                "packet_count": flow.get(
-                    "packet_count",
-                    0
-                ),
-                "byte_count": flow.get(
-                    "byte_count",
-                    0
-                ),
+                "source_port": flow.get("source_port"),
+                "destination_port": flow.get("destination_port"),
+                "protocol": flow.get("protocol"),
+                "packet_count": flow.get("packet_count", 0),
+                "byte_count": flow.get("byte_count", 0),
+                "duration": flow.get("duration", 0),
+                "packets_per_second": flow.get("packets_per_second", 0),
+                "bytes_per_second": flow.get("bytes_per_second", 0),
+                "average_packet_size": flow.get("average_packet_size", 0),
+                "tcp_syn_count": flow.get("tcp_syn_count", 0),
+                "tcp_rst_count": flow.get("tcp_rst_count", 0),
+                "process": flow.get("process"),
+                "fake_website": flow.get("fake_website"),
+                "demo_scenario": flow.get("demo_scenario"),
+                "expected_label": flow.get("expected_label"),
 
                 # Isolation Forest
                 "isolation_forest": {
-                    "is_anomaly": (
-                        isolation_results[index][
-                            "is_anomaly"
-                        ]
-                    ),
-                    "decision_score": (
-                        isolation_results[index][
-                            "decision_score"
-                        ]
-                    )
+                    "is_anomaly": isolation_results[index]["is_anomaly"],
+                    "decision_score": isolation_results[index]["decision_score"]
                 },
 
                 # GAT
@@ -412,20 +401,14 @@ class DetectionEngine:
                         if gat_result
                         else 0.0
                     ),
-                    "threshold": (
-                        gat_result["threshold"]
-                        if gat_result
-                        else self.gat.threshold
-                    )
+                    "threshold": gat_threshold
                 },
 
                 # Fusion
                 "fusion": fusion
             }
 
-            final_results.append(
-                result
-            )
+            final_results.append(result)
 
         # =========================================================
         # COUNT ANOMALIES

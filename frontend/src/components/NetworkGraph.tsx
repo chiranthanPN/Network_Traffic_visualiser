@@ -107,6 +107,10 @@ export function NetworkGraph({
         dstNode.byteCount += f.byte_count || 64;
         dstNode.lastSeen = now;
         dstNode.isHighPulsing = dstNode.risk === 'HIGH';
+        if (f.fake_website?.is_fake) {
+          (dstNode as any).isFakeWebsite = true;
+          (dstNode as any).fakeSiteName = f.fake_website.site_name;
+        }
       } else {
         currentNodes.set(dst, {
           id: dst,
@@ -117,7 +121,10 @@ export function NetworkGraph({
           byteCount: f.byte_count || 64,
           lastSeen: now,
           isHighPulsing: risk === 'HIGH',
-        });
+          ...(f.fake_website?.is_fake
+            ? { isFakeWebsite: true, fakeSiteName: f.fake_website.site_name }
+            : {}),
+        } as any);
       }
 
       // Update or insert Link
@@ -257,18 +264,24 @@ export function NetworkGraph({
       ctx.strokeStyle = isSelected ? '#FFFFFF' : isHigh ? '#B91C1C' : isMedium ? '#D97706' : '#1D4ED8';
       ctx.stroke();
 
-      // 4. Node Label: Always show for HIGH risk, selected, or top talkers; otherwise show when zoomed in
-      const shouldShowLabel = isHigh || isSelected || topTalkerIds.has(node.id) || globalScale >= 1.6;
+      // 4. Node Label: Always show for HIGH risk, selected, fake website, or top talkers; otherwise show when zoomed in
+      const isFake = (node as any).isFakeWebsite;
+      const fakeSiteName = (node as any).fakeSiteName;
+      const shouldShowLabel = isHigh || isFake || isSelected || topTalkerIds.has(node.id) || globalScale >= 1.6;
 
       if (shouldShowLabel) {
-        const label = node.id as string;
+        const label = isFake && fakeSiteName ? `⚠️ ${fakeSiteName} (${node.id})` : (node.id as string);
         const fontSize = Math.max(8, 11 / Math.sqrt(globalScale));
         ctx.font = `bold ${fontSize}px "JetBrains Mono", monospace`;
         ctx.textAlign = 'center';
 
         // Background tag for readability
         const textWidth = ctx.measureText(label).width;
-        ctx.fillStyle = isHigh ? 'rgba(239, 68, 68, 0.85)' : 'rgba(11, 15, 25, 0.85)';
+        ctx.fillStyle = isFake
+          ? 'rgba(217, 119, 6, 0.9)'
+          : isHigh
+          ? 'rgba(239, 68, 68, 0.85)'
+          : 'rgba(11, 15, 25, 0.85)';
         ctx.fillRect(
           node.x - textWidth / 2 - 3,
           node.y + radius + 3,
@@ -276,7 +289,7 @@ export function NetworkGraph({
           fontSize + 4
         );
 
-        ctx.fillStyle = isHigh ? '#FFFFFF' : '#E5E7EB';
+        ctx.fillStyle = isHigh || isFake ? '#FFFFFF' : '#E5E7EB';
         ctx.fillText(label, node.x, node.y + radius + fontSize + 2);
       }
     },

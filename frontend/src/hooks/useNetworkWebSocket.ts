@@ -3,6 +3,8 @@ import { NetworkUpdate, FlowResult, ChartEntry } from '../types/network';
 
 interface WebSocketHookOptions {
   onHighAlert?: (alertFlow: FlowResult) => void;
+  onFakeWebsiteAlert?: (alert: { flow: FlowResult; fake_website: any }) => void;
+  onInfoNotice?: (msg: string) => void;
 }
 
 export function useNetworkWebSocket(url: string, options?: WebSocketHookOptions) {
@@ -11,14 +13,19 @@ export function useNetworkWebSocket(url: string, options?: WebSocketHookOptions)
   const [flows, setFlows] = useState<FlowResult[]>([]);
   const [chartData, setChartData] = useState<ChartEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [infoNotice, setInfoNotice] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const backoffRef = useRef(1000);
   const onHighAlertRef = useRef(options?.onHighAlert);
+  const onFakeWebsiteAlertRef = useRef(options?.onFakeWebsiteAlert);
+  const onInfoNoticeRef = useRef(options?.onInfoNotice);
 
   useEffect(() => {
     onHighAlertRef.current = options?.onHighAlert;
-  }, [options?.onHighAlert]);
+    onFakeWebsiteAlertRef.current = options?.onFakeWebsiteAlert;
+    onInfoNoticeRef.current = options?.onInfoNotice;
+  }, [options?.onHighAlert, options?.onFakeWebsiteAlert, options?.onInfoNotice]);
 
   const connect = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.CONNECTING) return;
@@ -41,6 +48,12 @@ export function useNetworkWebSocket(url: string, options?: WebSocketHookOptions)
           return;
         }
 
+        if (data.type === 'info' || data.type === 'capture_mode_info') {
+          setInfoNotice(data.message as string);
+          onInfoNoticeRef.current?.(data.message as string);
+          return;
+        }
+
         if (data.type === 'network_update') {
           const update = data as NetworkUpdate;
           setLastUpdate(update);
@@ -52,9 +65,26 @@ export function useNetworkWebSocket(url: string, options?: WebSocketHookOptions)
             timestamp: f.timestamp || update.timestamp,
           }));
 
-          // Fire toast / alert callback for any new HIGH risk flows in this window
+          // Check for fake website alerts
+          if (update.fake_website_alerts && update.fake_website_alerts.length > 0) {
+            update.fake_website_alerts.forEach(fwa => {
+              onFakeWebsiteAlertRef.current?.(fwa);
+            });
+          } else {
+            // Fallback: check individual flows
+            taggedFlows.forEach(f => {
+              if (f.fake_website && f.fake_website.is_fake) {
+                onFakeWebsiteAlertRef.current?.({
+                  flow: f,
+                  fake_website: f.fake_website
+                });
+              }
+            });
+          }
+
+          // Fire toast / alert callback for any new HIGH risk flows in this window (excluding fake websites if already handled)
           if (onHighAlertRef.current) {
-            const highFlows = taggedFlows.filter(f => f.fusion.risk_level === 'HIGH');
+            const highFlows = taggedFlows.filter(f => f.fusion.risk_level === 'HIGH' && !f.fake_website);
             highFlows.forEach(hf => {
               onHighAlertRef.current?.(hf);
             });
@@ -125,5 +155,5 @@ export function useNetworkWebSocket(url: string, options?: WebSocketHookOptions)
     setError(null);
   }, []);
 
-  return { isConnected, lastUpdate, flows, chartData, error, clearHistory };
+  return { isConnected, lastUpdate, flows, chartData, error, infoNotice, clearHistory };
 }

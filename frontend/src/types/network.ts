@@ -19,6 +19,24 @@ export interface FusionResult {
   risk_level: 'LOW' | 'MEDIUM' | 'HIGH';
 }
 
+export interface FakeWebsiteInfo {
+  is_fake: boolean;
+  site_id: string;
+  site_name: string;
+  category: string;
+  domain: string;
+  description: string;
+  risk_level: string;
+  warning: string;
+  icon?: string;
+  matched_ip?: string;
+}
+
+export interface FakeWebsiteAlert {
+  flow: FlowResult;
+  fake_website: FakeWebsiteInfo;
+}
+
 export interface FlowResult {
   source_ip: string;
   destination_ip: string;
@@ -37,8 +55,10 @@ export interface FlowResult {
   gat: GATResult;
   fusion: FusionResult;
   demo_scenario?: string;
-  expected_label?: 'NORMAL' | 'SYNTHETIC_ANOMALY';
+  expected_label?: string;
   timestamp?: number;
+  process?: string;
+  fake_website?: FakeWebsiteInfo;
 }
 
 // ─── Window-level snapshot (one WebSocket message) ───────────────────────────
@@ -60,6 +80,7 @@ export interface NetworkUpdate {
   type: 'network_update';
   mode?: 'live' | 'demo';
   dataset_name?: string;
+  capture_mode?: 'bpf' | 'system' | 'demo' | 'simulation';
   /** Unix timestamp (seconds) */
   timestamp: number;
   /** Seconds for this analysis window */
@@ -70,6 +91,7 @@ export interface NetworkUpdate {
   anomalies: number;
   risk_counts: RiskCounts;
   flows: FlowResult[];
+  fake_website_alerts?: FakeWebsiteAlert[];
 }
 
 // ─── Backend health / status ─────────────────────────────────────────────────
@@ -77,6 +99,8 @@ export interface NetworkUpdate {
 export interface HealthStatus {
   api: boolean;
   capture: boolean;
+  capture_mode?: string | null;
+  bpf_available?: boolean;
   isolation_forest: boolean;
   gat: boolean;
 }

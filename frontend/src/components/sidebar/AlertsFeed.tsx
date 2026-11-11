@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import {
   AlertTriangle, ShieldCheck, Flame, Crosshair, Key,
-  UploadCloud, Activity, Clock
+  UploadCloud, Activity, Clock, ShoppingBag
 } from 'lucide-react';
 import { FlowResult } from '../../types/network';
 import { timeAgo } from '../../utils/network';
@@ -12,9 +12,13 @@ interface AlertsFeedProps {
   onSelectNode: (ip: string) => void;
 }
 
-function getAttackIcon(scenario?: string) {
+function getAttackIcon(scenario?: string, isFake?: boolean) {
+  if (isFake) return <ShoppingBag className="w-3.5 h-3.5 text-amber-400 animate-pulse" />;
   if (!scenario) return <AlertTriangle className="w-3.5 h-3.5 text-medium" />;
   const s = scenario.toLowerCase();
+  if (s.includes('fake') || s.includes('shop') || s.includes('sauce') || s.includes('demo')) {
+    return <ShoppingBag className="w-3.5 h-3.5 text-amber-400 animate-pulse" />;
+  }
   if (s.includes('scan')) return <Crosshair className="w-3.5 h-3.5 text-yellow-400" />;
   if (s.includes('flood') || s.includes('syn')) return <Flame className="w-3.5 h-3.5 text-high" />;
   if (s.includes('login') || s.includes('auth')) return <Key className="w-3.5 h-3.5 text-amber-400" />;
@@ -92,32 +96,43 @@ export function AlertsFeed({ flows, onSelectFlow, onSelectNode }: AlertsFeedProp
         {alerts.slice(0, 40).map((f, i) => {
           const isNewest = i === 0;
           const isHigh = f.fusion.risk_level === 'HIGH';
+          const isFake = !!f.fake_website?.is_fake;
 
           return (
             <div
               key={i}
               onClick={() => onSelectFlow(f)}
               className={`p-2.5 rounded-lg border cursor-pointer transition-all hover:scale-[1.01] ${
-                isHigh
+                isFake
+                  ? 'bg-amber-500/15 border-amber-500/60 hover:bg-amber-500/25 shadow-[0_0_12px_rgba(245,158,11,0.2)]'
+                  : isHigh
                   ? 'bg-high/10 border-high/50 hover:bg-high/15'
                   : 'bg-medium/10 border-medium/50 hover:bg-medium/15'
               } ${isNewest ? 'animate-pulse ring-1 ring-high shadow-glow-high' : ''}`}
             >
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-1.5">
-                  {getAttackIcon(f.demo_scenario)}
+                  {getAttackIcon(f.demo_scenario, isFake)}
                   <span
                     className={`text-[9px] font-bold font-mono px-1.5 py-0.2 rounded uppercase ${
-                      isHigh ? 'bg-high/30 text-high' : 'bg-medium/30 text-medium'
+                      isFake
+                        ? 'bg-amber-500/30 text-amber-300 border border-amber-500/50'
+                        : isHigh
+                        ? 'bg-high/30 text-high'
+                        : 'bg-medium/30 text-medium'
                     }`}
                   >
-                    {f.fusion.risk_level}
+                    {isFake ? 'FAKE SITE' : f.fusion.risk_level}
                   </span>
-                  {f.demo_scenario && (
+                  {f.fake_website ? (
+                    <span className="text-[10px] font-mono text-amber-200 font-bold truncate max-w-[130px]">
+                      {f.fake_website.site_name}
+                    </span>
+                  ) : f.demo_scenario ? (
                     <span className="text-[10px] font-mono text-gray-300 font-semibold truncate max-w-[110px]">
                       {f.demo_scenario.replace(/_/g, ' ')}
                     </span>
-                  )}
+                  ) : null}
                 </div>
 
                 <div className="flex items-center gap-1 text-[10px] text-gray-500 font-mono">

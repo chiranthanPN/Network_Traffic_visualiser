@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Shield, Play, Square, Wifi, WifiOff, Volume2, VolumeX,
-  RotateCcw, Box, Eye
+  RotateCcw, Box, Eye, ShoppingBag, ChevronDown, Sparkles
 } from 'lucide-react';
 import { HealthStatus, DatasetOption } from '../types/network';
 
@@ -11,6 +11,7 @@ interface HeaderProps {
   isMonitoring: boolean;
   isStarting: boolean;
   isDemoMode: boolean;
+  captureMode?: string | null;
   health: HealthStatus | null;
   soundEnabled: boolean;
   is3D: boolean;
@@ -26,6 +27,7 @@ interface HeaderProps {
   onStop: () => void;
   onDemo: () => void;
   onReset: () => void;
+  onSimulateFakeSite?: (siteId: string) => void;
 }
 
 function StatusDot({ ok, label }: { ok: boolean | undefined; label: string }) {
@@ -55,6 +57,7 @@ export function Header({
   isMonitoring,
   isStarting,
   isDemoMode,
+  captureMode,
   health,
   soundEnabled,
   is3D,
@@ -70,7 +73,10 @@ export function Header({
   onStop,
   onDemo,
   onReset,
+  onSimulateFakeSite,
 }: HeaderProps) {
+  const [fakeSiteMenuOpen, setFakeSiteMenuOpen] = useState(false);
+
   const liveStatus = (() => {
     if (backendUp === false) {
       return { label: 'BACKEND DOWN', cls: 'bg-high/20 text-high border-high/50 shadow-glow-high' };
@@ -79,10 +85,20 @@ export function Header({
       return { label: 'CONNECTING...', cls: 'bg-medium/20 text-medium border-medium/50' };
     }
     if (isMonitoring && isConnected) {
+      if (isDemoMode) {
+        return {
+          label: activeDatasetName ? `● DEMO: ${activeDatasetName}` : '● DEMO REPLAY',
+          cls: 'bg-low/20 text-low border-low/50 shadow-[0_0_8px_rgba(16,185,129,0.35)]',
+        };
+      }
+      if (captureMode === 'system') {
+        return {
+          label: '● LIVE (SYSTEM)',
+          cls: 'bg-primary/20 text-cyan-300 border-primary/50 shadow-[0_0_8px_rgba(59,130,246,0.35)]',
+        };
+      }
       return {
-        label: isDemoMode
-          ? (activeDatasetName ? `● DEMO: ${activeDatasetName}` : '● DEMO REPLAY')
-          : '● LIVE MONITORING',
+        label: '● LIVE (BPF)',
         cls: 'bg-low/20 text-low border-low/50 shadow-[0_0_8px_rgba(16,185,129,0.35)]',
       };
     }
@@ -200,6 +216,53 @@ export function Header({
           <Box className="w-3.5 h-3.5" />
           <span>{is3D ? '3D' : '2D'}</span>
         </button>
+
+        {/* Fake Website Simulation Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setFakeSiteMenuOpen(!fakeSiteMenuOpen)}
+            disabled={backendUp === false}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium border border-amber-500/50 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-all shadow-[0_0_10px_rgba(245,158,11,0.2)]"
+            title="Simulate or probe fake websites to test detection & alert popup"
+          >
+            <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">Test Fake Site</span>
+            <ChevronDown className="w-3 h-3 opacity-70" />
+          </button>
+
+          {fakeSiteMenuOpen && (
+            <div
+              className="absolute right-0 mt-1.5 w-60 py-1 rounded-xl bg-panel border border-amber-500/40 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150"
+              onMouseLeave={() => setFakeSiteMenuOpen(false)}
+            >
+              <div className="px-3 py-1.5 text-[10px] uppercase font-bold text-gray-400 border-b border-border/60">
+                Trigger Fake Website Alert
+              </div>
+              {[
+                { id: 'saucedemo', name: 'SauceDemo', desc: 'Fake Online Shopping Store' },
+                { id: 'automation_exercise', name: 'Automation Exercise', desc: 'Demo E-Commerce Website' },
+                { id: 'the_internet', name: 'The Internet', desc: 'Web Testing Scenarios Lab' },
+                { id: 'opencart_demo', name: 'OpenCart Demo', desc: 'Demo Shopping Website' },
+                { id: 'expand_testing', name: 'Expand Testing', desc: 'Web Testing Scenarios' },
+              ].map((site) => (
+                <button
+                  key={site.id}
+                  onClick={() => {
+                    onSimulateFakeSite?.(site.id);
+                    setFakeSiteMenuOpen(false);
+                  }}
+                  className="w-full px-3 py-2 text-left hover:bg-amber-500/15 flex flex-col transition-colors group"
+                >
+                  <span className="text-xs font-semibold text-white group-hover:text-amber-300 flex items-center justify-between">
+                    <span>{site.name}</span>
+                    <Sparkles className="w-3 h-3 text-amber-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </span>
+                  <span className="text-[10px] text-gray-400">{site.desc}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {!isMonitoring ? (
           <>

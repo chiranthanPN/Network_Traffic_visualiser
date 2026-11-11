@@ -108,7 +108,11 @@ class AlertManager:
                 "fusion"
             ][
                 "risk_level"
-            ]
+            ],
+
+            "fake_website": result.get("fake_website"),
+            "process": result.get("process"),
+            "demo_scenario": result.get("demo_scenario")
         }
 
         return event

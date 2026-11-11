@@ -39,7 +39,10 @@ export function FlowTable({
           !searchTerm ||
           f.source_ip.includes(searchTerm) ||
           f.destination_ip.includes(searchTerm) ||
-          f.protocol.toLowerCase().includes(searchTerm.toLowerCase())
+          f.protocol.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (f.fake_website && f.fake_website.site_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (f.fake_website && f.fake_website.domain.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (f.process && f.process.toLowerCase().includes(searchTerm.toLowerCase()))
       );
   }, [flows, filterRisk, searchTerm]);
 
@@ -219,8 +222,15 @@ export function FlowTable({
                   </td>
 
                   <td className="px-3 py-2 font-mono whitespace-nowrap select-all">
-                    {f.destination_ip}
-                    <span className="text-gray-500">:{f.destination_port}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span>{f.destination_ip}</span>
+                      <span className="text-gray-500">:{f.destination_port}</span>
+                    </div>
+                    {f.fake_website && (
+                      <span className="inline-block mt-0.5 px-1.5 py-0.2 rounded bg-amber-500/25 text-amber-300 border border-amber-500/40 text-[9px] font-sans font-bold">
+                        ⚠️ {f.fake_website.site_name}
+                      </span>
+                    )}
                   </td>
 
                   <td className="px-3 py-2 font-mono text-gray-300">{f.protocol}</td>

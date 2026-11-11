@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Toaster, toast } from 'sonner';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Info } from 'lucide-react';
 import { useNetworkWebSocket } from './hooks/useNetworkWebSocket';
-import { getHealth, getDatasets, startDemo, startMonitor, stopMonitor } from './services/api';
-import { HealthStatus, FlowResult, DatasetOption } from './types/network';
+import { getHealth, getDatasets, startDemo, startMonitor, stopMonitor, simulateFakeSite } from './services/api';
+import { HealthStatus, FlowResult, DatasetOption, FakeWebsiteAlert } from './types/network';
 import { soundManager } from './utils/audio';
 
 import { Header } from './components/Header';
@@ -14,6 +14,7 @@ import { FlowDetails } from './components/sidebar/FlowDetails';
 import { AlertsFeed } from './components/sidebar/AlertsFeed';
 import { VisualAnalytics } from './components/analytics/VisualAnalytics';
 import { FlowTable } from './components/FlowTable';
+import { FakeWebsiteAlertModal } from './components/FakeWebsiteAlertModal';
 
 export default function App() {
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -23,6 +24,10 @@ export default function App() {
   // Datasets for sample replay
   const [datasets, setDatasets] = useState<DatasetOption[]>([]);
   const [selectedDataset, setSelectedDataset] = useState<string>('demo_anomaly_flows.csv');
+
+  // Pop-up Alert state for Fake Websites
+  const [activeFakeAlert, setActiveFakeAlert] = useState<FakeWebsiteAlert | null>(null);
+  const snoozedDomainsRef = useRef<Map<string, number>>(new Map());
 
   // Trigger Sonner toast and audio on new HIGH alert
   const handleHighAlert = useCallback((flow: FlowResult) => {
@@ -35,9 +40,39 @@ export default function App() {
     });
   }, []);
 
-  const { isConnected, lastUpdate, flows, chartData, error: wsError, clearHistory } =
+  // Pop-up Alert warning for Fake Online Shopping / Demo Websites
+  const handleFakeWebsiteAlert = useCallback((alert: FakeWebsiteAlert) => {
+    const domain = alert.fake_website.domain;
+    const now = Date.now();
+    const snoozedUntil = snoozedDomainsRef.current.get(domain) || 0;
+
+    // Sonner notification toast
+    toast.warning(`FAKE WEBSITE DETECTED: ${alert.fake_website.site_name}`, {
+      description: `${domain} (${alert.fake_website.category}) — Insecure simulated environment!`,
+      duration: 6000,
+    });
+
+    // If snoozed recently, skip center modal popup
+    if (now < snoozedUntil) {
+      return;
+    }
+
+    // Play urgent sound alert
+    soundManager.playFakeSiteAlertSound();
+
+    // Trigger Pop-up Alert Warning Modal
+    setActiveFakeAlert(alert);
+  }, []);
+
+  const handleSnoozeDomain = useCallback((domain: string) => {
+    snoozedDomainsRef.current.set(domain, Date.now() + 60000);
+    toast.info(`Snoozed popups for ${domain} for 60s`);
+  }, []);
+
+  const { isConnected, lastUpdate, flows, chartData, error: wsError, infoNotice, clearHistory } =
     useNetworkWebSocket('ws://localhost:8000/api/ws', {
       onHighAlert: handleHighAlert,
+      onFakeWebsiteAlert: handleFakeWebsiteAlert,
     });
 
   const [health, setHealth] = useState<HealthStatus | null>(null);
@@ -169,6 +204,16 @@ export default function App() {
     setIs3D(!is3D);
   };
 
+  const handleSimulateFakeSite = async (siteId: string) => {
+    try {
+      toast.info(`Injecting live test traffic for ${siteId}...`);
+      const res = await simulateFakeSite(siteId);
+      toast.success(`Generated live test connection for ${res.site} (${res.domain})`);
+    } catch {
+      toast.error('Simulation request failed');
+    }
+  };
+
   // Active IPs & links count
   const activeIPs = useMemo(() => {
     const set = new Set<string>();
@@ -193,6 +238,26 @@ export default function App() {
       {/* Toast Notification Container */}
       <Toaster position="top-right" theme="dark" richColors />
 
+      {/* ══ POP-UP ALERT WARNING MODAL FOR FAKE WEBSITES ══════════════════════ */}
+      <FakeWebsiteAlertModal
+        alert={activeFakeAlert}
+        onClose={() => {
+          if (activeFakeAlert) {
+            snoozedDomainsRef.current.set(activeFakeAlert.fake_website.domain, Date.now() + 15000);
+          }
+          setActiveFakeAlert(null);
+        }}
+        onInspect={(flow) => {
+          if (activeFakeAlert) {
+            snoozedDomainsRef.current.set(activeFakeAlert.fake_website.domain, Date.now() + 30000);
+          }
+          setSelectedEdge(flow);
+          setSelectedNode(null);
+          setActiveTab('graph');
+        }}
+        onSnooze={handleSnoozeDomain}
+      />
+
       {/* ══ 1. TOP HEADER ═════════════════════════════════════════════════════ */}
       <Header
         backendUp={backendUp}
@@ -200,6 +265,7 @@ export default function App() {
         isMonitoring={isMonitoring}
         isStarting={isStarting}
         isDemoMode={lastUpdate?.mode === 'demo'}
+        captureMode={lastUpdate?.capture_mode || health?.capture_mode}
         health={health}
         soundEnabled={soundEnabled}
         is3D={is3D}
@@ -215,6 +281,7 @@ export default function App() {
         onStop={handleStop}
         onDemo={handleDemo}
         onReset={handleReset}
+        onSimulateFakeSite={handleSimulateFakeSite}
       />
 
       {/* ══ 2. BACKEND / WS ERROR BANNER ══════════════════════════════════════ */}
@@ -223,8 +290,16 @@ export default function App() {
           <AlertTriangle className="w-4 h-4 flex-shrink-0 animate-pulse" />
           <span>
             {wsError ||
-              'Cannot reach backend at http://localhost:8000. Run "python run.py" or check Administrator privileges for Scapy.'}
+              'Cannot reach backend at http://localhost:8000. Run "python run.py".'}
           </span>
+        </div>
+      )}
+
+      {/* Informational / Capture Mode Notice */}
+      {infoNotice && !wsError && (
+        <div className="flex-shrink-0 bg-primary/10 border-b border-primary/30 px-4 py-1 text-xs text-cyan-300 flex items-center gap-2 select-text font-mono">
+          <Info className="w-3.5 h-3.5 flex-shrink-0 text-primary" />
+          <span>{infoNotice}</span>
         </div>
       )}
 

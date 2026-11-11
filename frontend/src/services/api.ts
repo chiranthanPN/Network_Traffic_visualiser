@@ -29,3 +29,13 @@ export async function stopMonitor(): Promise<{status: string}> {
   const res = await fetch(`${API_BASE}/monitor/stop`, { method: 'POST' });
   return res.json();
 }
+
+export async function simulateFakeSite(siteId: string = 'saucedemo'): Promise<{status: string; site: string; domain: string}> {
+  const res = await fetch(`${API_BASE}/monitor/simulate-fake-site?site_id=${siteId}`, { method: 'POST' });
+  return res.json();
+}
+
+export async function getFakeSites(): Promise<any[]> {
+  const res = await fetch(`${API_BASE}/fake-sites`);
+  return res.json();
+}
